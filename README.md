@@ -16,18 +16,6 @@ curl -s -X POST http://localhost:8080/v1/scrape \
   -d '{"url": "https://example.com"}' | jq .markdown
 ```
 
-## Want managed scraping?
-
-[anakin.io](https://anakin.io) gives you everything in this repo plus:
-
-- Geo-proxies in 195 countries
-- Built-in caching and rate limiting
-- AI-powered structured data extraction at scale
-- 99.9% uptime SLA
-- Zero infrastructure to manage
-
-[Get started free at anakin.io →](https://anakin.io)
-
 ## Features
 
 - **Sync + async API** — `POST /v1/scrape` returns the result directly; `/v1/url-scraper` for async with polling
@@ -100,7 +88,7 @@ No API keys required for the scraper itself. Just JSON in, results out.
 ```
                     ┌─────────────────┐
                     │   Your App      │
-                    │   (cURL / SDK)  │
+                    │   (cURL / code) │
                     └────────┬────────┘
                              │ HTTP
                              ▼
@@ -145,8 +133,6 @@ See [docs/API.md](docs/API.md) for the complete API reference. Quick overview:
 | `url` | string | **required** | URL to scrape |
 | `useBrowser` | bool | `false` | Skip HTTP handler, go straight to browser |
 | `generateJson` | bool | `false` | Extract structured JSON via Gemini AI (requires `GEMINI_API_KEY`) |
-| `country` | string | `"us"` | *Reserved — available in [hosted version](https://anakin.io)* |
-| `forceFresh` | bool | `false` | *Reserved — available in [hosted version](https://anakin.io)* |
 
 ### Response
 
@@ -338,6 +324,12 @@ See [CONTRIBUTING.md](CONTRIBUTING.md).
 ## License
 
 [AGPL-3.0](LICENSE) — free to self-host. If you modify the code and offer it as a hosted service, you must open-source your changes.
+
+---
+
+### Want managed scraping?
+
+[anakin.io](https://anakin.io) offers everything in this repo plus geo-proxies in 195 countries, built-in caching, rate limiting, and zero infrastructure to manage. [Try it free →](https://anakin.io)
 
 ---
 
