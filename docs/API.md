@@ -1,37 +1,14 @@
 # AnakinScraper API Reference
 
-Base URL: `http://localhost:8080` (default)
+Base URL: `http://localhost:8080`
 
 ## Authentication
 
-All endpoints except `/health` require an API key. Pass it via any of these headers:
+None. AnakinScraper OSS is designed for self-hosting and does not require authentication. All endpoints are open.
 
-```
-X-API-Key: sk_live_abc123
-Authorization: Bearer sk_live_abc123
-Api-Key: sk_live_abc123
-```
+## Rate Limiting
 
-### Create an API Key
-
-```bash
-curl -X POST http://localhost:8080/v1/api-keys \
-  -H "Content-Type: application/json" \
-  -d '{"name": "my-key"}'
-```
-
-Response:
-
-```json
-{
-  "id": "key-uuid",
-  "name": "my-key",
-  "key": "sk_live_abc123...",
-  "createdAt": "2025-01-15T10:00:00Z"
-}
-```
-
-The full key is shown only once. Store it securely.
+None. You are responsible for managing load on your own infrastructure.
 
 ---
 
@@ -43,33 +20,79 @@ The full key is shown only once. Store it securely.
 GET /health
 ```
 
-No authentication required.
+Returns the service health status. Always accessible.
 
 ```bash
 curl http://localhost:8080/health
 ```
 
-Response:
+**Response:**
 
 ```json
-{"status": "ok", "redis": true, "service": "anakinscraper"}
+{
+  "status": "ok",
+  "database": true,
+  "service": "anakinscraper"
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `status` | string | Always `"ok"` |
+| `database` | bool | Whether the PostgreSQL connection is healthy |
+| `service` | string | Always `"anakinscraper"` |
+
+---
+
+### Scrape a URL (Synchronous)
+
+```
+POST /v1/scrape
+```
+
+Submit a scrape job and wait for the result. The server holds the connection open for up to 30 seconds. If the job completes within that window, the full result is returned directly. If not, a `408` timeout error is returned.
+
+This is the simplest way to scrape a page when you do not want to deal with polling.
+
+**Request:**
+
+```bash
+curl -X POST http://localhost:8080/v1/scrape \
+  -H "Content-Type: application/json" \
+  -d '{
+    "url": "https://example.com",
+    "useBrowser": false,
+    "generateJson": false
+  }'
+```
+
+**Request body:** Same as [POST /v1/url-scraper](#scrape-a-url-async).
+
+**Response (completed):** Same shape as [GET /v1/url-scraper/:id](#get-job-result) when status is `completed`.
+
+**Response (timeout):**
+
+```json
+{
+  "error": "timeout",
+  "message": "Job did not complete within 30 seconds. Use the async endpoint and poll for results."
+}
 ```
 
 ---
 
-### Scrape a Single URL
+### Scrape a URL (Async)
 
 ```
 POST /v1/url-scraper
 ```
 
-Submit a scrape job for a single URL. Returns immediately with a job ID. Poll the job result endpoint to get the scraped content.
+Submit a scrape job for a single URL. Returns immediately with a job ID. Poll [GET /v1/url-scraper/:id](#get-job-result) to retrieve the result.
 
 **Request:**
 
 ```bash
 curl -X POST http://localhost:8080/v1/url-scraper \
-  -H "X-API-Key: YOUR_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
     "url": "https://example.com",
@@ -82,20 +105,21 @@ curl -X POST http://localhost:8080/v1/url-scraper \
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `url` | string | **required** | URL to scrape |
-| `country` | string | `"us"` | Proxy country code |
-| `forceFresh` | bool | `false` | Bypass cache |
-| `useBrowser` | bool | `false` | Force browser rendering (skip HTTP handler) |
-| `generateJson` | bool | `false` | Extract structured JSON via AI (requires Gemini API key) |
+| `url` | string | **required** | The URL to scrape. Must use `http` or `https` scheme. |
+| `country` | string | `""` | Proxy country code. Reserved for future use (no-op in OSS; available on hosted [anakin.io](https://anakin.io)). |
+| `forceFresh` | bool | `false` | Bypass cache. Reserved for future use (no-op in OSS; available on hosted [anakin.io](https://anakin.io)). |
+| `useBrowser` | bool | `false` | Force browser rendering via Camoufox. When `false`, the HTTP handler is tried first and the browser is used as a fallback. |
+| `generateJson` | bool | `false` | Extract structured JSON from the page using Gemini. Requires the `GEMINI_API_KEY` environment variable to be set on the server. |
 
-**Response (pending):**
+**Response (`201 Created`):**
 
 ```json
 {
   "id": "550e8400-e29b-41d4-a716-446655440000",
   "status": "pending",
   "url": "https://example.com",
-  "jobType": "url_scraper"
+  "jobType": "url_scraper",
+  "createdAt": "2025-01-15T10:30:00Z"
 }
 ```
 
@@ -110,8 +134,7 @@ GET /v1/url-scraper/:id
 Retrieve the current state of a scrape job.
 
 ```bash
-curl http://localhost:8080/v1/url-scraper/550e8400-e29b-41d4-a716-446655440000 \
-  -H "X-API-Key: YOUR_API_KEY"
+curl http://localhost:8080/v1/url-scraper/550e8400-e29b-41d4-a716-446655440000
 ```
 
 **Response (completed):**
@@ -140,11 +163,43 @@ curl http://localhost:8080/v1/url-scraper/550e8400-e29b-41d4-a716-446655440000 \
   "id": "550e8400-e29b-41d4-a716-446655440000",
   "status": "failed",
   "url": "https://example.com",
-  "error": "all handlers failed: HTTP 403, browser timeout"
+  "jobType": "url_scraper",
+  "error": "all handlers failed: HTTP 403, browser timeout",
+  "createdAt": "2025-01-15T10:30:00Z"
 }
 ```
 
-**Status lifecycle:** `pending` -> `processing` -> `completed` | `failed`
+**Response fields:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | string | Job UUID |
+| `status` | string | One of: `pending`, `processing`, `completed`, `failed` |
+| `url` | string | The URL that was scraped |
+| `jobType` | string | `"url_scraper"` |
+| `html` | string or null | Raw HTML of the page (only when `completed`) |
+| `cleanedHtml` | string or null | Cleaned HTML with boilerplate removed (only when `completed`) |
+| `markdown` | string or null | Page content converted to Markdown (only when `completed`) |
+| `generatedJson` | object or null | AI-extracted structured data (only when `generateJson` was `true`) |
+| `cached` | bool or null | Whether the result was served from cache (only when `completed`) |
+| `error` | string or null | Error message (only when `failed`) |
+| `createdAt` | string | ISO 8601 timestamp |
+| `completedAt` | string or null | ISO 8601 timestamp (only when `completed`) |
+| `durationMs` | int or null | Total processing time in milliseconds (only when `completed`) |
+
+**`generatedJson` shape** (when present):
+
+```json
+{
+  "status": "success",
+  "data": { "title": "Example", "price": "$9.99", "..." : "..." }
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `status` | string | `"success"` or `"failed"` |
+| `data` | object | Extracted structured data (only when `status` is `"success"`) |
 
 ---
 
@@ -154,13 +209,12 @@ curl http://localhost:8080/v1/url-scraper/550e8400-e29b-41d4-a716-446655440000 \
 POST /v1/url-scraper/batch
 ```
 
-Scrape up to 10 URLs in a single request. Returns a batch job ID. Poll for results.
+Submit up to 10 URLs for scraping in a single request. Returns a batch job ID. Poll [GET /v1/url-scraper/batch/:id](#get-batch-result) for results.
 
 **Request:**
 
 ```bash
 curl -X POST http://localhost:8080/v1/url-scraper/batch \
-  -H "X-API-Key: YOUR_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
     "urls": [
@@ -177,26 +231,38 @@ curl -X POST http://localhost:8080/v1/url-scraper/batch \
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
 | `urls` | string[] | **required** | 1 to 10 URLs to scrape |
-| `country` | string | `"us"` | Proxy country code |
-| `useBrowser` | bool | `false` | Force browser rendering |
-| `generateJson` | bool | `false` | Extract structured JSON |
+| `country` | string | `""` | Proxy country code. Reserved for future use (no-op in OSS). |
+| `useBrowser` | bool | `false` | Force browser rendering for all URLs |
+| `generateJson` | bool | `false` | Extract structured JSON for all URLs (requires `GEMINI_API_KEY`) |
 
-**Response (pending):**
+**Response (`201 Created`):**
 
 ```json
 {
   "id": "batch-job-uuid",
   "status": "pending",
   "jobType": "batch_url_scraper",
-  "urls": ["url1", "url2", "url3"]
+  "urls": [
+    "https://example.com/page-1",
+    "https://example.com/page-2",
+    "https://example.com/page-3"
+  ],
+  "createdAt": "2025-01-15T10:30:00Z"
 }
 ```
 
-**Poll for results:**
+---
+
+### Get Batch Result
+
+```
+GET /v1/url-scraper/batch/:id
+```
+
+Retrieve the current state of a batch scrape job, including per-URL results.
 
 ```bash
-curl http://localhost:8080/v1/url-scraper/batch/BATCH_JOB_UUID \
-  -H "X-API-Key: YOUR_API_KEY"
+curl http://localhost:8080/v1/url-scraper/batch/BATCH_JOB_UUID
 ```
 
 **Response (completed):**
@@ -206,7 +272,10 @@ curl http://localhost:8080/v1/url-scraper/batch/BATCH_JOB_UUID \
   "id": "batch-job-uuid",
   "status": "completed",
   "jobType": "batch_url_scraper",
-  "urls": ["url1", "url2", "url3"],
+  "urls": [
+    "https://example.com/page-1",
+    "https://example.com/page-2"
+  ],
   "results": [
     {
       "index": 0,
@@ -215,6 +284,7 @@ curl http://localhost:8080/v1/url-scraper/batch/BATCH_JOB_UUID \
       "html": "...",
       "cleanedHtml": "...",
       "markdown": "...",
+      "generatedJson": null,
       "cached": false,
       "durationMs": 1234
     },
@@ -225,175 +295,259 @@ curl http://localhost:8080/v1/url-scraper/batch/BATCH_JOB_UUID \
       "html": "...",
       "cleanedHtml": "...",
       "markdown": "...",
+      "generatedJson": null,
       "cached": false,
       "durationMs": 987
     }
   ],
-  "createdAt": "...",
-  "completedAt": "...",
+  "createdAt": "2025-01-15T10:30:00Z",
+  "completedAt": "2025-01-15T10:30:08Z",
   "durationMs": 5678
 }
 ```
 
----
-
-### Discover URLs (Map)
-
-```
-POST /v1/map
-```
-
-Discover links on a page. Useful for building a list of URLs to scrape.
-
-**Request:**
-
-```bash
-curl -X POST http://localhost:8080/v1/map \
-  -H "X-API-Key: YOUR_API_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "url": "https://example.com",
-    "includeSubdomains": false,
-    "limit": 100,
-    "search": "blog"
-  }'
-```
-
-| Field | Type | Default | Description |
-|-------|------|---------|-------------|
-| `url` | string | **required** | Starting URL |
-| `includeSubdomains` | bool | `false` | Include links to subdomains |
-| `limit` | int | `100` | Max links to return (max: 5000) |
-| `search` | string | -- | Filter links containing this string |
-
-**Poll for results:**
-
-```bash
-curl http://localhost:8080/v1/map/MAP_JOB_UUID \
-  -H "X-API-Key: YOUR_API_KEY"
-```
-
-**Response (completed):**
-
-```json
-{
-  "id": "map-job-uuid",
-  "status": "completed",
-  "url": "https://example.com",
-  "links": [
-    "https://example.com/blog/post-1",
-    "https://example.com/blog/post-2",
-    "https://example.com/about"
-  ],
-  "totalLinks": 42
-}
-```
+The batch `status` is derived from the child jobs: it remains `pending` if any child is pending, `processing` if any child is processing, and becomes `completed` once all children finish.
 
 ---
 
-### Multi-Page Crawl
+### List Domain Configs
 
 ```
-POST /v1/crawl
+GET /v1/domain-configs
 ```
 
-Crawl multiple pages starting from a URL. The crawler follows links on the page, respecting the include/exclude patterns.
-
-**Request:**
+Return all per-domain scraping configurations.
 
 ```bash
-curl -X POST http://localhost:8080/v1/crawl \
-  -H "X-API-Key: YOUR_API_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "url": "https://example.com",
-    "maxPages": 10,
-    "includePatterns": ["/blog/**"],
-    "excludePatterns": ["/admin/**"],
-    "country": "us"
-  }'
+curl http://localhost:8080/v1/domain-configs
 ```
 
-| Field | Type | Default | Description |
-|-------|------|---------|-------------|
-| `url` | string | **required** | Starting URL |
-| `maxPages` | int | `10` | Max pages to crawl (max: 100) |
-| `includePatterns` | string[] | -- | Glob patterns for URLs to include |
-| `excludePatterns` | string[] | -- | Glob patterns for URLs to exclude |
-| `country` | string | `"us"` | Proxy country code |
-| `useBrowser` | bool | `false` | Force browser rendering |
-
-**Poll for results:**
-
-```bash
-curl http://localhost:8080/v1/crawl/CRAWL_JOB_UUID \
-  -H "X-API-Key: YOUR_API_KEY"
-```
-
-**Response (completed):**
+**Response (`200 OK`):**
 
 ```json
-{
-  "id": "crawl-job-uuid",
-  "status": "completed",
-  "url": "https://example.com",
-  "totalPages": 10,
-  "completedPages": 8,
-  "results": [
-    {
-      "url": "https://example.com/",
-      "status": "completed",
-      "markdown": "# Home\n\nWelcome...",
-      "durationMs": 2100
-    },
-    {
-      "url": "https://example.com/blog/post-1",
-      "status": "completed",
-      "markdown": "# Blog Post 1\n\n...",
-      "durationMs": 1800
-    },
-    {
-      "url": "https://example.com/blog/post-2",
-      "status": "failed",
-      "error": "HTTP 404",
-      "durationMs": 350
+[
+  {
+    "id": 1,
+    "domain": "example.com",
+    "isEnabled": true,
+    "matchSubdomains": false,
+    "priority": 0,
+    "handlerChain": ["http", "browser"],
+    "requestTimeoutMs": 30000,
+    "maxRetries": 2,
+    "minContentLength": 0,
+    "failurePatterns": [],
+    "requiredPatterns": [],
+    "customHeaders": {},
+    "customUserAgent": "",
+    "proxyUrl": "",
+    "blocked": false,
+    "blockedReason": "",
+    "notes": "",
+    "createdAt": "2025-01-15T10:00:00Z",
+    "updatedAt": "2025-01-15T10:00:00Z"
+  }
+]
+```
+
+Returns an empty array `[]` if no configs exist.
+
+---
+
+### Create Domain Config
+
+```
+POST /v1/domain-configs
+```
+
+Create a new per-domain configuration. Domain configs let you customize handler chain order, timeouts, retries, custom headers, and more for specific domains.
+
+```bash
+curl -X POST http://localhost:8080/v1/domain-configs \
+  -H "Content-Type: application/json" \
+  -d '{
+    "domain": "example.com",
+    "isEnabled": true,
+    "matchSubdomains": true,
+    "handlerChain": ["browser", "http"],
+    "requestTimeoutMs": 45000,
+    "maxRetries": 3,
+    "customHeaders": {
+      "Accept-Language": "en-US"
     }
-  ]
-}
+  }'
 ```
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `domain` | string | **required** | The domain name (e.g. `"example.com"`) |
+| `isEnabled` | bool | `false` | Whether the config is active |
+| `matchSubdomains` | bool | `false` | Apply to all subdomains of the domain |
+| `priority` | int | `0` | Higher priority configs take precedence |
+| `handlerChain` | string[] | `["http", "browser"]` | Ordered list of scraping handlers to try |
+| `requestTimeoutMs` | int | `30000` | Per-request timeout in milliseconds |
+| `maxRetries` | int | `2` | Maximum retry attempts |
+| `minContentLength` | int | `0` | Minimum acceptable content length (bytes) |
+| `failurePatterns` | string[] | `[]` | Regex patterns that indicate a failed scrape |
+| `requiredPatterns` | string[] | `[]` | Regex patterns that must appear in successful content |
+| `customHeaders` | object | `{}` | Extra HTTP headers to send |
+| `customUserAgent` | string | `""` | Override the default User-Agent |
+| `proxyUrl` | string | `""` | Force a specific proxy for this domain |
+| `blocked` | bool | `false` | Mark domain as blocked (skips scraping) |
+| `blockedReason` | string | `""` | Reason the domain is blocked |
+| `notes` | string | `""` | Free-text notes |
+
+**Response (`201 Created`):** The created config object (same shape as the list response items).
 
 ---
 
-## Rate Limits
+### Get Domain Config
 
-| Endpoint | Limit |
-|----------|-------|
-| `POST /v1/url-scraper` | 60 requests/min per user |
-| `POST /v1/url-scraper/batch` | 30 requests/min per user |
-| `POST /v1/map` | 30 requests/min per user |
-| `POST /v1/crawl` | 10 requests/min per user |
+```
+GET /v1/domain-configs/:domain
+```
 
-When rate-limited, the API returns `429 Too Many Requests`:
+Get the config for a specific domain.
 
 ```bash
-curl -s -w "\n%{http_code}" -X POST http://localhost:8080/v1/url-scraper \
-  -H "X-API-Key: YOUR_API_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{"url": "https://example.com"}'
+curl http://localhost:8080/v1/domain-configs/example.com
 ```
+
+**Response (`200 OK`):** A single domain config object.
+
+**Response (`404 Not Found`):**
 
 ```json
 {
-  "error": "rate_limited",
-  "message": "Too many requests. Please slow down."
+  "error": "not_found",
+  "message": "Domain config not found"
 }
 ```
 
 ---
 
-## Error Codes
+### Update Domain Config
 
-All error responses follow this format:
+```
+PUT /v1/domain-configs/:domain
+```
+
+Update an existing domain config. Send the full config body; fields not included will be set to their zero values.
+
+```bash
+curl -X PUT http://localhost:8080/v1/domain-configs/example.com \
+  -H "Content-Type: application/json" \
+  -d '{
+    "isEnabled": true,
+    "handlerChain": ["browser"],
+    "requestTimeoutMs": 60000,
+    "maxRetries": 5
+  }'
+```
+
+**Response (`200 OK`):** The updated config object.
+
+---
+
+### Delete Domain Config
+
+```
+DELETE /v1/domain-configs/:domain
+```
+
+Delete a domain config.
+
+```bash
+curl -X DELETE http://localhost:8080/v1/domain-configs/example.com
+```
+
+**Response:** `204 No Content`
+
+---
+
+### View Proxy Scores
+
+```
+GET /v1/proxy/scores
+```
+
+View the current Thompson Sampling scores for all proxies, grouped by target host. Useful for monitoring which proxies perform best for which sites.
+
+```bash
+curl http://localhost:8080/v1/proxy/scores
+```
+
+**Response (`200 OK`):**
+
+```json
+{
+  "scores": {
+    "example.com": [
+      {
+        "proxyUrl": "http://proxy1:8080",
+        "targetHost": "example.com",
+        "alpha": 15,
+        "beta": 3,
+        "score": 0.833,
+        "totalRequests": 18,
+        "avgLatencyMs": 1200,
+        "lastUpdated": "2025-01-15T10:30:00Z"
+      }
+    ]
+  }
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `proxyUrl` | string | The proxy URL |
+| `targetHost` | string | The target domain |
+| `alpha` | int | Beta distribution success parameter |
+| `beta` | int | Beta distribution failure parameter |
+| `score` | float | Current win rate estimate (`alpha / (alpha + beta)`) |
+| `totalRequests` | int | Total requests routed through this proxy for this host |
+| `avgLatencyMs` | int | Exponential moving average latency in milliseconds |
+| `lastUpdated` | string | ISO 8601 timestamp of last score update |
+
+If no proxies are configured, the response is:
+
+```json
+{
+  "proxies": [],
+  "scores": {}
+}
+```
+
+---
+
+## Job Status Lifecycle
+
+```
+pending  -->  processing  -->  completed
+                           \-> failed
+```
+
+| Status | Meaning |
+|--------|---------|
+| `pending` | Job is queued, waiting for a worker |
+| `processing` | A worker is actively scraping the URL |
+| `completed` | Scrape succeeded -- results are available |
+| `failed` | Scrape failed -- check the `error` field for details |
+
+Common failure reasons:
+
+| Error | Description |
+|-------|-------------|
+| `all handlers failed` | Both HTTP and browser handlers failed |
+| `timeout` | Page load exceeded the configured timeout |
+| `blocked` | The target site blocked the request (403/captcha) |
+| `invalid_url` | URL could not be resolved or connected to |
+
+---
+
+## Error Responses
+
+All errors follow this format:
 
 ```json
 {
@@ -406,47 +560,26 @@ All error responses follow this format:
 |-------------|------------|-------------|
 | 400 | `invalid_url` | Malformed or missing URL |
 | 400 | `invalid_request` | Invalid request body or parameters |
-| 401 | `unauthorized` | Missing or invalid API key |
-| 429 | `rate_limited` | Too many requests -- slow down |
+| 404 | `not_found` | Job or resource not found |
+| 408 | `timeout` | Sync scrape did not complete in time (sync endpoint only) |
 | 500 | `internal_error` | Unexpected server error |
-
-### Job-level errors
-
-Jobs can also fail after being accepted. When polling a job, check the `status` field:
-
-| Status | Meaning |
-|--------|---------|
-| `pending` | Job is queued, waiting for a worker |
-| `processing` | Worker is actively scraping the URL |
-| `completed` | Scrape succeeded -- results are available |
-| `failed` | Scrape failed -- check the `error` field for details |
-
-Common job failure reasons:
-
-| Error | Description |
-|-------|-------------|
-| `all handlers failed` | Both HTTP and browser handlers failed to scrape the page |
-| `timeout` | Page load exceeded the configured timeout |
-| `blocked` | The target site blocked the request (403/captcha) |
-| `invalid_url` | URL could not be resolved or connected to |
 
 ---
 
 ## Polling Pattern
 
-All mutation endpoints (scrape, batch, map, crawl) return immediately with a job ID. Poll the corresponding GET endpoint until `status` is `completed` or `failed`.
+The async endpoints (`POST /v1/url-scraper`, `POST /v1/url-scraper/batch`) return immediately with a job ID. Poll the corresponding GET endpoint until `status` is `completed` or `failed`.
 
-Recommended polling strategy:
+Recommended strategy:
 
 1. Wait 1 second after submitting
-2. Poll every 1-2 seconds
-3. Set a maximum timeout (120 seconds recommended)
+2. Poll every 1--2 seconds
+3. Set a client-side timeout (60--120 seconds recommended)
 4. Handle `failed` status gracefully
 
 ```bash
 # 1. Submit
 JOB_ID=$(curl -s -X POST http://localhost:8080/v1/url-scraper \
-  -H "X-API-Key: YOUR_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{"url": "https://example.com"}' | jq -r '.id')
 
@@ -454,9 +587,7 @@ echo "Job ID: $JOB_ID"
 
 # 2. Poll
 while true; do
-  RESULT=$(curl -s http://localhost:8080/v1/url-scraper/$JOB_ID \
-    -H "X-API-Key: YOUR_API_KEY")
-
+  RESULT=$(curl -s http://localhost:8080/v1/url-scraper/$JOB_ID)
   STATUS=$(echo $RESULT | jq -r '.status')
   echo "Status: $STATUS"
 
@@ -469,20 +600,4 @@ while true; do
 done
 ```
 
-Or use the SDKs, which handle polling automatically:
-
-```python
-from anakinscraper import AnakinScraper
-
-client = AnakinScraper(api_key="sk_live_...", base_url="http://localhost:8080")
-result = client.scrape("https://example.com")  # blocks until done
-print(result.markdown)
-```
-
-```typescript
-import { AnakinScraper } from 'anakinscraper';
-
-const client = new AnakinScraper({ apiKey: 'sk_live_...', baseUrl: 'http://localhost:8080' });
-const result = await client.scrape('https://example.com'); // awaits until done
-console.log(result.markdown);
-```
+Alternatively, use `POST /v1/scrape` to avoid polling entirely -- it blocks until the job finishes or times out at 30 seconds.

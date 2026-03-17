@@ -1,28 +1,45 @@
 # Basic Scrape Example
 
-Scrape a single URL and print the markdown output.
+Scrape a single URL using the synchronous `/v1/scrape` endpoint.
 
 ## Prerequisites
 
 Start the stack first:
 
 ```bash
-make up
+cd ../.. && make up
 ```
 
 ## Run
 
 ```bash
 # Default URL (example.com)
-python main.py
+./scrape.sh
 
 # Custom URL
-python main.py https://news.ycombinator.com
+./scrape.sh https://news.ycombinator.com
+```
+
+Or with curl directly:
+
+```bash
+curl -s -X POST http://localhost:8080/v1/scrape \
+  -H "Content-Type: application/json" \
+  -d '{"url": "https://example.com"}' | jq .
+```
+
+## With Structured JSON Extraction
+
+Set `GEMINI_API_KEY` and pass `generateJson: true`:
+
+```bash
+curl -s -X POST http://localhost:8080/v1/scrape \
+  -H "Content-Type: application/json" \
+  -d '{"url": "https://example.com", "generateJson": true}' | jq .generatedJson
 ```
 
 ## Environment Variables
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `ANAKIN_API_KEY` | `sk_test_local_development_key_12345` | API key |
 | `ANAKIN_BASE_URL` | `http://localhost:8080` | API URL |

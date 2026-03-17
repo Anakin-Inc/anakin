@@ -55,12 +55,13 @@ func (h *ScraperHandler) CreateJob(c *fiber.Ctx) error {
 	}
 
 	h.pool.Submit(models.JobMessage{
-		JobID:      jobID,
-		URL:        req.URL,
-		JobType:    models.JobTypeURLScraper,
-		Country:    req.Country,
-		ForceFresh: req.ForceFresh,
-		UseBrowser: req.UseBrowser,
+		JobID:        jobID,
+		URL:          req.URL,
+		JobType:      models.JobTypeURLScraper,
+		Country:      req.Country,
+		ForceFresh:   req.ForceFresh,
+		UseBrowser:   req.UseBrowser,
+		GenerateJson: req.GenerateJson,
 	})
 
 	slog.Info("job created", "jobId", jobID, "url", req.URL)
@@ -72,6 +73,118 @@ func (h *ScraperHandler) CreateJob(c *fiber.Ctx) error {
 		JobType:   models.JobTypeURLScraper,
 		CreatedAt: now.Format(time.RFC3339),
 	})
+}
+
+// ScrapeSync is the synchronous endpoint: submit a job and wait for the result.
+// Polls the database every 500ms until the job completes or the 30s timeout expires.
+func (h *ScraperHandler) ScrapeSync(c *fiber.Ctx) error {
+	var req models.ScrapeRequest
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(models.ErrorResponse{
+			Error: "invalid_request", Message: "Invalid request body",
+		})
+	}
+	if err := validateURL(req.URL); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(models.ErrorResponse{
+			Error: "invalid_url", Message: err.Error(),
+		})
+	}
+
+	jobID := uuid.New().String()
+	now := time.Now().UTC()
+
+	payload, _ := json.Marshal(req)
+	_, err := h.db.ExecContext(c.Context(),
+		`INSERT INTO scrape_requests (id, url, job_type, status, country, payload, force_fresh, created_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+		jobID, req.URL, models.JobTypeURLScraper, models.JobStatusPending,
+		req.Country, string(payload), req.ForceFresh, now,
+	)
+	if err != nil {
+		slog.Error("failed to insert job", "error", err, "jobId", jobID)
+		return c.Status(fiber.StatusInternalServerError).JSON(models.ErrorResponse{
+			Error: "internal_error", Message: "Failed to create job",
+		})
+	}
+
+	h.pool.Submit(models.JobMessage{
+		JobID:        jobID,
+		URL:          req.URL,
+		JobType:      models.JobTypeURLScraper,
+		Country:      req.Country,
+		ForceFresh:   req.ForceFresh,
+		UseBrowser:   req.UseBrowser,
+		GenerateJson: req.GenerateJson,
+	})
+
+	slog.Info("sync scrape started", "jobId", jobID, "url", req.URL)
+
+	// Poll DB until job completes or 30s timeout
+	const (
+		pollInterval = 500 * time.Millisecond
+		maxWait      = 30 * time.Second
+	)
+	deadline := time.Now().Add(maxWait)
+	ticker := time.NewTicker(pollInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			var status string
+			var resultJSON sql.NullString
+			var errorMsg sql.NullString
+			var completedAt sql.NullTime
+			var durationMs sql.NullInt64
+
+			err := h.db.QueryRowContext(c.Context(),
+				`SELECT status, result, error, completed_at, duration_ms FROM scrape_requests WHERE id = $1`,
+				jobID,
+			).Scan(&status, &resultJSON, &errorMsg, &completedAt, &durationMs)
+			if err != nil {
+				continue
+			}
+
+			if status == models.JobStatusCompleted || status == models.JobStatusFailed {
+				resp := models.JobResponse{
+					ID: jobID, Status: status, URL: req.URL, JobType: models.JobTypeURLScraper,
+					CreatedAt: now.Format(time.RFC3339),
+				}
+				if completedAt.Valid {
+					t := completedAt.Time.Format(time.RFC3339)
+					resp.CompletedAt = &t
+				}
+				if errorMsg.Valid {
+					resp.Error = &errorMsg.String
+				}
+				if durationMs.Valid {
+					d := int(durationMs.Int64)
+					resp.DurationMs = &d
+				}
+				if status == models.JobStatusCompleted && resultJSON.Valid && resultJSON.String != "" {
+					var result scrapeResultJSON
+					if err := json.Unmarshal([]byte(resultJSON.String), &result); err == nil {
+						resp.HTML = result.HTML
+						resp.CleanedHTML = result.CleanedHTML
+						resp.Markdown = result.Markdown
+						resp.GeneratedJson = result.GeneratedJson
+						resp.Cached = result.Cached
+					}
+				}
+				return c.JSON(resp)
+			}
+
+			if time.Now().After(deadline) {
+				return c.Status(fiber.StatusRequestTimeout).JSON(models.ErrorResponse{
+					Error:   "timeout",
+					Message: fmt.Sprintf("Job %s is still processing. Use GET /v1/url-scraper/%s to poll for the result, or use the async POST /v1/url-scraper endpoint for long-running scrapes.", jobID, jobID),
+				})
+			}
+		case <-c.Context().Done():
+			// Client disconnected
+			return nil
+		}
+	}
 }
 
 func (h *ScraperHandler) GetJob(c *fiber.Ctx) error {
@@ -131,6 +244,7 @@ func (h *ScraperHandler) GetJob(c *fiber.Ctx) error {
 			resp.HTML = result.HTML
 			resp.CleanedHTML = result.CleanedHTML
 			resp.Markdown = result.Markdown
+			resp.GeneratedJson = result.GeneratedJson
 			resp.Cached = result.Cached
 		}
 	}
@@ -193,12 +307,13 @@ func (h *ScraperHandler) CreateBatchJob(c *fiber.Ctx) error {
 			continue
 		}
 		h.pool.Submit(models.JobMessage{
-			JobID:       childID,
-			URL:         u,
-			JobType:     models.JobTypeURLScraper,
-			Country:     req.Country,
-			UseBrowser:  req.UseBrowser,
-			ParentJobID: parentJobID,
+			JobID:        childID,
+			URL:          u,
+			JobType:      models.JobTypeURLScraper,
+			Country:      req.Country,
+			UseBrowser:   req.UseBrowser,
+			GenerateJson: req.GenerateJson,
+			ParentJobID:  parentJobID,
 		})
 	}
 
@@ -281,6 +396,7 @@ func (h *ScraperHandler) GetBatchJob(c *fiber.Ctx) error {
 				item.HTML = result.HTML
 				item.CleanedHTML = result.CleanedHTML
 				item.Markdown = result.Markdown
+				item.GeneratedJson = result.GeneratedJson
 				item.Cached = result.Cached
 			}
 		}
@@ -318,10 +434,11 @@ func (h *ScraperHandler) GetBatchJob(c *fiber.Ctx) error {
 }
 
 type scrapeResultJSON struct {
-	HTML        *string `json:"html,omitempty"`
-	CleanedHTML *string `json:"cleanedHtml,omitempty"`
-	Markdown    *string `json:"markdown,omitempty"`
-	Cached      *bool   `json:"cached,omitempty"`
+	HTML          *string                        `json:"html,omitempty"`
+	CleanedHTML   *string                        `json:"cleanedHtml,omitempty"`
+	Markdown      *string                        `json:"markdown,omitempty"`
+	GeneratedJson *models.GeneratedJsonResponse  `json:"generatedJson,omitempty"`
+	Cached        *bool                          `json:"cached,omitempty"`
 }
 
 func validateURL(rawURL string) error {

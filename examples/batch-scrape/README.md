@@ -1,26 +1,38 @@
 # Batch Scrape Example
 
-Scrape multiple URLs in a single API request.
+Scrape multiple URLs in a single API request (up to 10).
 
 ## Prerequisites
 
 Start the stack first:
 
 ```bash
-make up
+cd ../.. && make up
 ```
 
 ## Run
 
 ```bash
-python main.py
+./batch.sh
 ```
 
-The example scrapes 3 URLs and prints a preview of each result.
+Or with curl directly:
+
+```bash
+# Submit batch job
+JOB_ID=$(curl -s -X POST http://localhost:8080/v1/url-scraper/batch \
+  -H "Content-Type: application/json" \
+  -d '{"urls": ["https://example.com", "https://httpbin.org/html"]}' | jq -r '.id')
+
+echo "Batch job: $JOB_ID"
+
+# Poll for results
+sleep 3
+curl -s http://localhost:8080/v1/url-scraper/batch/$JOB_ID | jq '.results[] | {url, status}'
+```
 
 ## Environment Variables
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `ANAKIN_API_KEY` | `sk_test_local_development_key_12345` | API key |
 | `ANAKIN_BASE_URL` | `http://localhost:8080` | API URL |

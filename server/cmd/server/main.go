@@ -18,9 +18,12 @@ import (
 	_ "github.com/lib/pq"
 
 	"github.com/AnakinAI/anakinscraper-oss/server/internal/config"
+	"github.com/AnakinAI/anakinscraper-oss/server/internal/domain"
+	"github.com/AnakinAI/anakinscraper-oss/server/internal/gemini"
 	"github.com/AnakinAI/anakinscraper-oss/server/internal/handler"
 	"github.com/AnakinAI/anakinscraper-oss/server/internal/http/router"
 	"github.com/AnakinAI/anakinscraper-oss/server/internal/processor"
+	"github.com/AnakinAI/anakinscraper-oss/server/internal/proxy"
 	"github.com/AnakinAI/anakinscraper-oss/server/internal/worker"
 )
 
@@ -62,12 +65,28 @@ func main() {
 	chain := handler.NewChain([]handler.ScrapingHandler{httpHandler, browserHandler})
 	slog.Info("handler chain initialized", "handlers", chain.HandlerNames())
 
-	// Create processor and worker pool
-	proc := processor.NewProcessor(db, chain)
-	pool := worker.NewPool(proc, cfg.WorkerPoolSize, cfg.JobBufferSize, cfg.JobTimeout)
-
 	bgCtx, bgCancel := context.WithCancel(context.Background())
 	defer bgCancel()
+
+	// Domain config cache
+	domainRepo := domain.NewRepository(db)
+	domainCache := domain.NewCache(domainRepo)
+	domainCache.Start(bgCtx)
+	slog.Info("domain config cache started")
+
+	// Proxy pool (optional — only if PROXY_URLS is configured)
+	var proxyPool *proxy.Pool
+	if len(cfg.ProxyURLs) > 0 {
+		proxyPool = proxy.NewPool(db, cfg.ProxyURLs)
+		proxyPool.Start(bgCtx)
+	}
+
+	// Gemini client (optional — enables generateJson)
+	geminiClient := gemini.NewClient(cfg.GeminiAPIKey)
+
+	// Create processor and worker pool
+	proc := processor.NewProcessor(db, chain, domainCache, proxyPool, geminiClient)
+	pool := worker.NewPool(proc, cfg.WorkerPoolSize, cfg.JobBufferSize, cfg.JobTimeout)
 	pool.Start(bgCtx)
 
 	// Create Fiber app
@@ -92,12 +111,13 @@ func main() {
 	}))
 
 	// Setup routes
-	router.Setup(app, db, pool)
+	router.Setup(app, db, pool, proxyPool)
 
 	// Start server
 	go func() {
 		addr := fmt.Sprintf(":%s", cfg.Port)
-		slog.Info("starting server", "port", cfg.Port, "workers", cfg.WorkerPoolSize)
+		slog.Info("starting server", "port", cfg.Port, "workers", cfg.WorkerPoolSize,
+			"proxy_pool", len(cfg.ProxyURLs) > 0)
 		if err := app.Listen(addr); err != nil {
 			slog.Error("server error", "error", err)
 		}
@@ -122,7 +142,11 @@ func main() {
 	bgCancel()
 	pool.Drain()
 
-	// Cleanup browser handler
+	// Cleanup
+	domainCache.Stop()
+	if proxyPool != nil {
+		proxyPool.Stop()
+	}
 	browserHandler.Stop()
 
 	slog.Info("server stopped")

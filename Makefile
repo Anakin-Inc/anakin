@@ -6,8 +6,10 @@ up:
 	@echo ""
 	@echo "Stack is running!"
 	@echo "  API:     http://localhost:8080"
-	@echo "  Browser: ws://localhost:9222/playwright"
-	@echo "  API Key: sk_test_local_development_key_12345"
+	@echo "  Health:  http://localhost:8080/health"
+	@echo ""
+	@echo "Try it:"
+	@echo '  curl -X POST http://localhost:8080/v1/scrape -H "Content-Type: application/json" -d '"'"'{"url":"https://example.com"}'"'"''
 
 # Stop all services
 down:

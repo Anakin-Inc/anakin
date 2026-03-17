@@ -28,6 +28,10 @@ func (c *Chain) Execute(ctx context.Context, req *models.HandlerRequest) (*model
 	var lastErr error
 
 	for _, h := range c.handlers {
+		if len(req.AllowedHandlers) > 0 && !contains(req.AllowedHandlers, h.Name()) {
+			continue
+		}
+
 		if !h.CanHandle(ctx, req) {
 			slog.Debug("handler cannot handle request", "handler", h.Name(), "url", req.URL)
 			continue
@@ -69,6 +73,15 @@ func (c *Chain) Execute(ctx context.Context, req *models.HandlerRequest) (*model
 		lastErr = fmt.Errorf("no available handlers for request")
 	}
 	return nil, fmt.Errorf("all handlers failed: %w", lastErr)
+}
+
+func contains(ss []string, s string) bool {
+	for _, v := range ss {
+		if v == s {
+			return true
+		}
+	}
+	return false
 }
 
 // HandlerNames returns the names of all registered handlers.

@@ -13,8 +13,8 @@ This example implements a `CachedHTMLHandler` that serves pre-fetched HTML from 
 ## Run
 
 ```bash
-# From the scraper-service directory (needed for Go module dependencies)
-cd scraper-service
+# From the server directory (needed for Go module dependencies)
+cd server
 
 # Optional: create a cached page to test the custom handler
 mkdir -p cached-pages
@@ -29,8 +29,8 @@ go run ../examples/custom-handler/main.go https://example.com
 ```go
 type ScrapingHandler interface {
     Name() string
-    CanHandle(ctx context.Context, req *ScrapeRequest) bool
-    Scrape(ctx context.Context, req *ScrapeRequest) (*ScrapeResult, error)
+    CanHandle(ctx context.Context, req *models.HandlerRequest) bool
+    Scrape(ctx context.Context, req *models.HandlerRequest) (*ScrapeResult, error)
     IsHealthy() bool
 }
 ```

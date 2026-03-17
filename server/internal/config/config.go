@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -26,7 +27,11 @@ type Config struct {
 	JobBufferSize  int
 
 	// Proxy (optional)
-	ProxyURL string
+	ProxyURL  string
+	ProxyURLs []string // Pool of proxy URLs for auto-selection
+
+	// Gemini (optional — enables generateJson)
+	GeminiAPIKey string
 
 	// Logging
 	LogLevel string
@@ -45,6 +50,8 @@ func Load() (*Config, error) {
 		WorkerPoolSize:  getIntEnv("WORKER_POOL_SIZE", 5),
 		JobBufferSize:   getIntEnv("JOB_BUFFER_SIZE", 100),
 		ProxyURL:        os.Getenv("PROXY_URL"),
+		ProxyURLs:       getStringSliceEnv("PROXY_URLS"),
+		GeminiAPIKey:    os.Getenv("GEMINI_API_KEY"),
 		LogLevel:        getEnvOrDefault("LOG_LEVEL", "INFO"),
 	}
 
@@ -69,6 +76,21 @@ func getIntEnv(key string, defaultValue int) int {
 		}
 	}
 	return defaultValue
+}
+
+func getStringSliceEnv(key string) []string {
+	v := os.Getenv(key)
+	if v == "" {
+		return nil
+	}
+	var result []string
+	for _, s := range strings.Split(v, ",") {
+		s = strings.TrimSpace(s)
+		if s != "" {
+			result = append(result, s)
+		}
+	}
+	return result
 }
 
 func getDurationEnv(key string, defaultValue time.Duration) time.Duration {

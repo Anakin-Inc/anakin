@@ -9,19 +9,38 @@ import (
 	"time"
 
 	"github.com/AnakinAI/anakinscraper-oss/server/internal/converter"
+	"github.com/AnakinAI/anakinscraper-oss/server/internal/domain"
+	"github.com/AnakinAI/anakinscraper-oss/server/internal/gemini"
 	"github.com/AnakinAI/anakinscraper-oss/server/internal/handler"
 	"github.com/AnakinAI/anakinscraper-oss/server/internal/models"
+	"github.com/AnakinAI/anakinscraper-oss/server/internal/proxy"
 )
 
 // Processor handles individual scraping jobs.
 type Processor struct {
-	db    *sql.DB
-	chain *handler.Chain
+	db           *sql.DB
+	chain        *handler.Chain
+	domainCache  *domain.Cache
+	proxyPool    *proxy.Pool
+	detector     *domain.Detector
+	geminiClient *gemini.Client
 }
 
 // NewProcessor creates a new job processor.
-func NewProcessor(db *sql.DB, chain *handler.Chain) *Processor {
-	return &Processor{db: db, chain: chain}
+// domainCache, proxyPool, and geminiClient are optional (can be nil).
+func NewProcessor(db *sql.DB, chain *handler.Chain, domainCache *domain.Cache, proxyPool *proxy.Pool, geminiClient *gemini.Client) *Processor {
+	var det *domain.Detector
+	if domainCache != nil {
+		det = domain.NewDetector()
+	}
+	return &Processor{
+		db:           db,
+		chain:        chain,
+		domainCache:  domainCache,
+		proxyPool:    proxyPool,
+		detector:     det,
+		geminiClient: geminiClient,
+	}
 }
 
 // ProcessJob handles a single job from the worker pool.
@@ -39,15 +58,7 @@ func (p *Processor) ProcessJob(ctx context.Context, msg models.JobMessage) error
 		slog.Error("failed to update job to processing", "job_id", msg.JobID, "error", err)
 	}
 
-	var err error
-	switch msg.JobType {
-	case models.JobTypeMap:
-		err = p.processMapJob(ctx, msg, start)
-	case models.JobTypeCrawl:
-		err = p.processCrawlJob(ctx, msg, start)
-	default:
-		err = p.processScrapeJob(ctx, msg, start)
-	}
+	err := p.processScrapeJob(ctx, msg, start)
 
 	if err != nil {
 		return p.handleFailure(ctx, msg, start, err)
@@ -61,9 +72,104 @@ func (p *Processor) ProcessJob(ctx context.Context, msg models.JobMessage) error
 }
 
 func (p *Processor) processScrapeJob(ctx context.Context, msg models.JobMessage, start time.Time) error {
-	result, err := p.chain.Execute(ctx, p.buildHandlerRequest(msg, msg.URL))
-	if err != nil {
-		return err
+	// Look up domain config
+	var domainCfg *domain.DomainConfig
+	if p.domainCache != nil {
+		domainCfg = p.domainCache.GetConfig(msg.URL)
+	}
+
+	// Check if domain is blocked
+	if domainCfg != nil && domainCfg.Blocked {
+		reason := "domain is blocked"
+		if domainCfg.BlockedReason != "" {
+			reason += ": " + domainCfg.BlockedReason
+		}
+		return fmt.Errorf("%s", reason)
+	}
+
+	// Build handler request
+	req := p.buildHandlerRequest(msg, msg.URL)
+
+	// Apply domain config to request
+	if domainCfg != nil && domainCfg.IsEnabled {
+		if len(domainCfg.HandlerChain) > 0 {
+			req.AllowedHandlers = domainCfg.HandlerChain
+		}
+		if domainCfg.RequestTimeoutMs > 0 {
+			req.Timeout = time.Duration(domainCfg.RequestTimeoutMs) * time.Millisecond
+		}
+		if len(domainCfg.CustomHeaders) > 0 {
+			req.CustomHeaders = domainCfg.CustomHeaders
+		}
+		if domainCfg.CustomUserAgent != "" {
+			req.CustomUserAgent = domainCfg.CustomUserAgent
+		}
+		if domainCfg.ProxyURL != "" {
+			req.ProxyURL = domainCfg.ProxyURL
+		}
+	}
+
+	// Select proxy via Thompson Sampling (if no domain-specific proxy set)
+	targetHost := domain.ExtractHost(msg.URL)
+	if req.ProxyURL == "" && p.proxyPool != nil {
+		req.ProxyURL = p.proxyPool.SelectProxy(targetHost)
+	}
+
+	// Execute with retries
+	maxRetries := 1
+	if domainCfg != nil && domainCfg.MaxRetries > 0 {
+		maxRetries = domainCfg.MaxRetries
+	}
+
+	var result *models.ScrapeResult
+	var lastErr error
+	for attempt := 0; attempt <= maxRetries; attempt++ {
+		if attempt > 0 {
+			slog.Debug("retrying scrape", "job_id", msg.JobID, "attempt", attempt)
+		}
+
+		var err error
+		result, err = p.chain.Execute(ctx, req)
+		if err != nil {
+			lastErr = err
+			continue
+		}
+
+		// Content validation via failure detector
+		if domainCfg != nil && p.detector != nil {
+			detection := p.detector.Check(domainCfg, result.HTML)
+			if detection.Failed {
+				slog.Warn("content validation failed",
+					"job_id", msg.JobID,
+					"reason", detection.Reason,
+					"attempt", attempt,
+				)
+				if detection.ShouldRetry {
+					lastErr = fmt.Errorf("content validation: %s", detection.Reason)
+					continue
+				}
+				lastErr = fmt.Errorf("content validation: %s", detection.Reason)
+				break
+			}
+		}
+
+		// Success
+		lastErr = nil
+		break
+	}
+
+	// Report proxy result
+	if req.ProxyURL != "" && p.proxyPool != nil {
+		if lastErr != nil {
+			isBlocked := result != nil && result.StatusCode == 403
+			p.proxyPool.RecordFailure(req.ProxyURL, targetHost, isBlocked)
+		} else if result != nil {
+			p.proxyPool.RecordSuccess(req.ProxyURL, targetHost, result.DurationMs)
+		}
+	}
+
+	if lastErr != nil {
+		return lastErr
 	}
 
 	converted, err := converter.HTMLToMarkdown(result.HTML, msg.URL)
@@ -78,30 +184,50 @@ func (p *Processor) processScrapeJob(ctx context.Context, msg models.JobMessage,
 	result.CleanedHTML = converted.CleanedHTML
 	result.Markdown = converted.Markdown
 
+	// Generate structured JSON (optional — requires GEMINI_API_KEY)
+	var generatedJSON *models.GeneratedJsonResponse
+	if msg.GenerateJson && p.geminiClient != nil && p.geminiClient.IsEnabled() {
+		jsonResult, _, jsonErr := p.geminiClient.ExtractJSONFromMarkdown(ctx, result.Markdown, msg.URL)
+		if jsonErr != nil {
+			slog.Warn("JSON generation failed (non-blocking)", "job_id", msg.JobID, "error", jsonErr)
+			generatedJSON = &models.GeneratedJsonResponse{
+				Status: models.JsonStatusFailed,
+			}
+		} else if jsonResult != nil {
+			generatedJSON = &models.GeneratedJsonResponse{
+				Status: models.JsonStatusSuccess,
+				Data:   []byte(*jsonResult),
+			}
+		}
+	}
+
 	duration := int(time.Since(start).Milliseconds())
 	completedAt := time.Now().UTC().Format(time.RFC3339)
 	cached := result.Cached
 
 	response := models.JobStatusResponse{
-		ID:          msg.JobID,
-		Status:      models.JobStatusCompleted,
-		URL:         msg.URL,
-		JobType:     msg.JobType,
-		HTML:        &result.HTML,
-		CleanedHTML: &result.CleanedHTML,
-		Markdown:    &result.Markdown,
-		Cached:      &cached,
-		CreatedAt:   time.Now().UTC().Format(time.RFC3339),
-		CompletedAt: &completedAt,
-		DurationMs:  &duration,
+		ID:            msg.JobID,
+		Status:        models.JobStatusCompleted,
+		URL:           msg.URL,
+		JobType:       msg.JobType,
+		HTML:          &result.HTML,
+		CleanedHTML:   &result.CleanedHTML,
+		Markdown:      &result.Markdown,
+		GeneratedJson: generatedJSON,
+		Cached:        &cached,
+		CreatedAt:     time.Now().UTC().Format(time.RFC3339),
+		CompletedAt:   &completedAt,
+		DurationMs:    &duration,
 	}
 
 	if err := p.storeResult(ctx, msg.JobID, response); err != nil {
 		slog.Error("failed to store result", "job_id", msg.JobID, "error", err)
+		return fmt.Errorf("failed to store result: %w", err)
 	}
 
 	if err := p.updateJobCompleted(ctx, msg.JobID, duration, len(result.HTML)); err != nil {
 		slog.Error("failed to update job in database", "job_id", msg.JobID, "error", err)
+		return fmt.Errorf("failed to update job: %w", err)
 	}
 
 	slog.Info("job completed",
@@ -110,123 +236,6 @@ func (p *Processor) processScrapeJob(ctx context.Context, msg models.JobMessage,
 		"duration_ms", duration,
 		"html_length", len(result.HTML),
 	)
-	return nil
-}
-
-func (p *Processor) processMapJob(ctx context.Context, msg models.JobMessage, start time.Time) error {
-	result, err := p.chain.Execute(ctx, p.buildHandlerRequest(msg, msg.URL))
-	if err != nil {
-		return err
-	}
-
-	limit := msg.Limit
-	if limit <= 0 {
-		limit = 100
-	}
-	if limit > 5000 {
-		limit = 5000
-	}
-
-	links := extractLinks(msg.URL, result.HTML, msg.IncludeSubdomains, msg.Search)
-	if len(links) > limit {
-		links = links[:limit]
-	}
-
-	duration := int(time.Since(start).Milliseconds())
-
-	if err := p.storeResult(ctx, msg.JobID, models.MapJobResult{Links: links}); err != nil {
-		slog.Error("failed to store map result", "job_id", msg.JobID, "error", err)
-	}
-
-	if err := p.updateJobCompleted(ctx, msg.JobID, duration, len(result.HTML)); err != nil {
-		slog.Error("failed to update map job in database", "job_id", msg.JobID, "error", err)
-	}
-
-	return nil
-}
-
-func (p *Processor) processCrawlJob(ctx context.Context, msg models.JobMessage, start time.Time) error {
-	maxPages := msg.MaxPages
-	if maxPages <= 0 {
-		maxPages = 10
-	}
-	if maxPages > 100 {
-		maxPages = 100
-	}
-
-	queue := []string{msg.URL}
-	visited := map[string]struct{}{}
-	enqueued := map[string]struct{}{msg.URL: {}}
-	results := make([]models.CrawlResult, 0, maxPages)
-	completedPages := 0
-
-	for len(queue) > 0 && len(visited) < maxPages {
-		current := queue[0]
-		queue = queue[1:]
-		if _, done := visited[current]; done {
-			continue
-		}
-		visited[current] = struct{}{}
-
-		pageStart := time.Now()
-		pageResult, err := p.chain.Execute(ctx, p.buildHandlerRequest(msg, current))
-		pageDuration := int(time.Since(pageStart).Milliseconds())
-		if err != nil {
-			errMsg := err.Error()
-			results = append(results, models.CrawlResult{
-				URL:        current,
-				Status:     models.JobStatusFailed,
-				Error:      &errMsg,
-				DurationMs: &pageDuration,
-			})
-			continue
-		}
-
-		converted, convErr := converter.HTMLToMarkdown(pageResult.HTML, current)
-		var markdown string
-		if convErr != nil {
-			markdown = pageResult.HTML
-		} else {
-			markdown = converted.Markdown
-		}
-		completedPages++
-		results = append(results, models.CrawlResult{
-			URL:        current,
-			Status:     models.JobStatusCompleted,
-			Markdown:   &markdown,
-			DurationMs: &pageDuration,
-		})
-
-		links := extractLinks(current, pageResult.HTML, false, "")
-		links = filterLinksByPatterns(links, msg.IncludePatterns, msg.ExcludePatterns)
-		for _, link := range links {
-			if _, done := visited[link]; done {
-				continue
-			}
-			if _, queued := enqueued[link]; queued {
-				continue
-			}
-			enqueued[link] = struct{}{}
-			queue = append(queue, link)
-		}
-	}
-
-	duration := int(time.Since(start).Milliseconds())
-
-	crawlResult := models.CrawlJobResult{
-		TotalPages:     maxPages,
-		CompletedPages: completedPages,
-		Results:        results,
-	}
-
-	if err := p.storeResult(ctx, msg.JobID, crawlResult); err != nil {
-		slog.Error("failed to store crawl result", "job_id", msg.JobID, "error", err)
-	}
-
-	if err := p.updateJobCompleted(ctx, msg.JobID, duration, 0); err != nil {
-		slog.Error("failed to update crawl job in database", "job_id", msg.JobID, "error", err)
-	}
-
 	return nil
 }
 

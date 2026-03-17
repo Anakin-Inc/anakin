@@ -42,3 +42,4 @@ docker-compose.override.yml
 # Temp
 tmp/
 *.log
+*/anakinscraper

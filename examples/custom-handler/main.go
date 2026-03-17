@@ -1,12 +1,12 @@
 // Custom handler example — demonstrates extending the AnakinScraper handler chain.
 //
 // This example adds a "cached-html" handler that serves pre-cached HTML from a
-// local directory, falling back to the built-in HTTP and Browser handlers for
-// any URL that isn't cached locally.
+// local directory, falling back to the built-in HTTP handler for any URL that
+// isn't cached locally.
 //
-// To run this example you need the scraper-service dependencies:
+// To run this example:
 //
-//	cd scraper-service && go run ../examples/custom-handler/main.go
+//	cd server && go run ../examples/custom-handler/main.go
 package main
 
 import (
@@ -16,9 +16,10 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
-	"github.com/AnakinAI/anakinscraper-oss/scraper-service/internal/handler"
-	"github.com/AnakinAI/anakinscraper-oss/scraper-service/internal/models"
+	"github.com/AnakinAI/anakinscraper-oss/server/internal/handler"
+	"github.com/AnakinAI/anakinscraper-oss/server/internal/models"
 )
 
 // -----------------------------------------------------------------------
@@ -40,7 +41,7 @@ func (h *CachedHTMLHandler) Name() string {
 }
 
 // CanHandle returns true if a cached file exists for the request URL's host.
-func (h *CachedHTMLHandler) CanHandle(_ context.Context, req *models.ScrapeRequest) bool {
+func (h *CachedHTMLHandler) CanHandle(_ context.Context, req *models.HandlerRequest) bool {
 	_, err := os.Stat(h.filePath(req.URL))
 	return err == nil
 }
@@ -50,7 +51,7 @@ func (h *CachedHTMLHandler) IsHealthy() bool {
 	return err == nil && info.IsDir()
 }
 
-func (h *CachedHTMLHandler) Scrape(_ context.Context, req *models.ScrapeRequest) (*models.ScrapeResult, error) {
+func (h *CachedHTMLHandler) Scrape(_ context.Context, req *models.HandlerRequest) (*models.ScrapeResult, error) {
 	data, err := os.ReadFile(h.filePath(req.URL))
 	if err != nil {
 		return nil, fmt.Errorf("failed to read cached file: %w", err)
@@ -82,9 +83,8 @@ func main() {
 	// Your custom handler — checked first
 	cachedHandler := NewCachedHTMLHandler("./cached-pages")
 
-	// Built-in handlers as fallback
-	httpHandler := handler.NewHTTPHandler(30_000_000_000, "") // 30s, no proxy
-	// NOTE: BrowserHandler omitted for simplicity; add it the same way
+	// Built-in HTTP handler as fallback
+	httpHandler := handler.NewHTTPHandler(30*time.Second, "")
 
 	// Build the chain: cached-html → http → (browser)
 	chain := handler.NewChain([]handler.ScrapingHandler{
@@ -101,7 +101,7 @@ func main() {
 		url = os.Args[1]
 	}
 
-	result, err := chain.Execute(ctx, &models.ScrapeRequest{
+	result, err := chain.Execute(ctx, &models.HandlerRequest{
 		URL: url,
 	})
 	if err != nil {

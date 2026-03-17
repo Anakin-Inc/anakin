@@ -52,11 +52,34 @@ func (h *HTTPHandler) Scrape(ctx context.Context, req *models.HandlerRequest) (*
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 
-	httpReq.Header.Set("User-Agent", defaultUserAgent)
+	// User-agent: per-request override > default
+	ua := defaultUserAgent
+	if req.CustomUserAgent != "" {
+		ua = req.CustomUserAgent
+	}
+	httpReq.Header.Set("User-Agent", ua)
 	httpReq.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
 	httpReq.Header.Set("Accept-Language", "en-US,en;q=0.9")
 
-	resp, err := h.client.Do(httpReq)
+	// Apply custom headers
+	for k, v := range req.CustomHeaders {
+		httpReq.Header.Set(k, v)
+	}
+
+	// Use per-request proxy if specified, otherwise the default client
+	client := h.client
+	if req.ProxyURL != "" {
+		transport := &http.Transport{
+			MaxIdleConns:    10,
+			IdleConnTimeout: 30 * time.Second,
+		}
+		if parsed, parseErr := url.Parse(req.ProxyURL); parseErr == nil {
+			transport.Proxy = http.ProxyURL(parsed)
+		}
+		client = &http.Client{Transport: transport, Timeout: h.timeout}
+	}
+
+	resp, err := client.Do(httpReq)
 	if err != nil {
 		return nil, fmt.Errorf("HTTP request failed: %w", err)
 	}
