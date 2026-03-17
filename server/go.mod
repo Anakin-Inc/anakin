@@ -1,8 +1,6 @@
 module github.com/AnakinAI/anakinscraper-oss/server
 
-go 1.22.1
-
-toolchain go1.22.3
+go 1.23.0
 
 require (
 	github.com/JohannesKaufmann/html-to-markdown/v2 v2.2.2
@@ -29,6 +27,6 @@ require (
 	github.com/valyala/bytebufferpool v1.0.0 // indirect
 	github.com/valyala/fasthttp v1.51.0 // indirect
 	github.com/valyala/tcplisten v1.0.0 // indirect
-	golang.org/x/net v0.33.0 // indirect
-	golang.org/x/sys v0.28.0 // indirect
+	golang.org/x/net v0.38.0 // indirect
+	golang.org/x/sys v0.31.0 // indirect
 )
