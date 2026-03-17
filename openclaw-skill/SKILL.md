@@ -19,14 +19,20 @@ git clone https://github.com/AnakinAI/anakinscraper-oss.git
 cd anakinscraper-oss && make up
 ```
 
-2. Add the MCP server to your OpenClaw config (`~/.openclaw/config.json`):
+2. Build the MCP server:
+
+```bash
+cd anakinscraper-oss/mcp-server && npm install && npm run build
+```
+
+3. Add the MCP server to your OpenClaw config (`~/.openclaw/config.json`):
 
 ```json
 {
   "mcpServers": {
     "anakinscraper": {
-      "command": "npx",
-      "args": ["-y", "anakinscraper-mcp"],
+      "command": "node",
+      "args": ["/path/to/anakinscraper-oss/mcp-server/dist/index.js"],
       "env": {
         "ANAKINSCRAPER_API_URL": "http://localhost:8080"
       }
@@ -34,8 +40,6 @@ cd anakinscraper-oss && make up
   }
 }
 ```
-
-Or install globally: `npm install -g anakinscraper-mcp`
 
 ## Available Tools
 

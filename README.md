@@ -299,20 +299,20 @@ See [cli/README.md](cli/README.md) for full usage.
 
 ### MCP Server (Claude, Cursor, VS Code, Windsurf)
 
-Add AnakinScraper as a tool for AI agents:
+Add AnakinScraper as a tool for AI agents. Build it once, then point your editor to the local server:
 
 ```bash
-npx -y anakinscraper-mcp
+cd mcp-server && npm install && npm run build
 ```
 
-Or add to your Claude Desktop / Cursor config:
+Add to your Claude Desktop / Cursor config:
 
 ```json
 {
   "mcpServers": {
     "anakinscraper": {
-      "command": "npx",
-      "args": ["-y", "anakinscraper-mcp"],
+      "command": "node",
+      "args": ["/path/to/anakinscraper-oss/mcp-server/dist/index.js"],
       "env": { "ANAKINSCRAPER_API_URL": "http://localhost:8080" }
     }
   }
