@@ -1,0 +1,128 @@
+package handler
+
+import (
+	"context"
+	"fmt"
+	"log/slog"
+	"time"
+
+	"github.com/AnakinAI/anakinscraper-oss/server/internal/models"
+	"github.com/playwright-community/playwright-go"
+)
+
+// BrowserHandler implements ScrapingHandler using Playwright browser automation.
+type BrowserHandler struct {
+	wsURL       string
+	timeout     time.Duration
+	loadWait    time.Duration
+	pw          *playwright.Playwright
+	initialized bool
+}
+
+func NewBrowserHandler(wsURL string, timeout, loadWait time.Duration) *BrowserHandler {
+	return &BrowserHandler{
+		wsURL:    wsURL,
+		timeout:  timeout,
+		loadWait: loadWait,
+	}
+}
+
+func (h *BrowserHandler) Name() string                                                   { return "browser" }
+func (h *BrowserHandler) CanHandle(_ context.Context, _ *models.HandlerRequest) bool { return true }
+
+func (h *BrowserHandler) IsHealthy() bool {
+	if h.initialized {
+		return true
+	}
+	pw, err := playwright.Run()
+	if err != nil {
+		slog.Warn("playwright driver not available", "error", err)
+		return false
+	}
+	h.pw = pw
+	h.initialized = true
+	return true
+}
+
+func (h *BrowserHandler) ensurePlaywright() error {
+	if h.initialized && h.pw != nil {
+		return nil
+	}
+	pw, err := playwright.Run()
+	if err != nil {
+		return fmt.Errorf("failed to start playwright: %w", err)
+	}
+	h.pw = pw
+	h.initialized = true
+	return nil
+}
+
+func (h *BrowserHandler) Scrape(ctx context.Context, req *models.HandlerRequest) (*models.ScrapeResult, error) {
+	if err := h.ensurePlaywright(); err != nil {
+		return nil, err
+	}
+
+	browser, err := h.pw.Chromium.Connect(h.wsURL, playwright.BrowserTypeConnectOptions{
+		Timeout: playwright.Float(float64(h.timeout.Milliseconds())),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to connect to browser at %s: %w", h.wsURL, err)
+	}
+	defer func() {
+		if disconnectErr := browser.Close(); disconnectErr != nil {
+			slog.Warn("failed to close browser connection", "error", disconnectErr)
+		}
+	}()
+
+	browserCtx, err := browser.NewContext()
+	if err != nil {
+		return nil, fmt.Errorf("failed to create browser context: %w", err)
+	}
+	defer func() {
+		if closeErr := browserCtx.Close(); closeErr != nil {
+			slog.Warn("failed to close browser context", "error", closeErr)
+		}
+	}()
+
+	page, err := browserCtx.NewPage()
+	if err != nil {
+		return nil, fmt.Errorf("failed to create page: %w", err)
+	}
+
+	timeout := h.timeout.Milliseconds()
+	_, err = page.Goto(req.URL, playwright.PageGotoOptions{
+		WaitUntil: playwright.WaitUntilStateNetworkidle,
+		Timeout:   playwright.Float(float64(timeout)),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("navigation failed: %w", err)
+	}
+
+	if h.loadWait > 0 {
+		select {
+		case <-time.After(h.loadWait):
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
+	}
+
+	html, err := page.Content()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get page content: %w", err)
+	}
+
+	return &models.ScrapeResult{
+		HTML:       html,
+		StatusCode: 200,
+	}, nil
+}
+
+// Stop cleans up the Playwright driver.
+func (h *BrowserHandler) Stop() {
+	if h.pw != nil {
+		if err := h.pw.Stop(); err != nil {
+			slog.Warn("failed to stop playwright", "error", err)
+		}
+		h.initialized = false
+	}
+}

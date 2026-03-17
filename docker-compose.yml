@@ -1,0 +1,47 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    ports: ["5432:5432"]
+    environment:
+      POSTGRES_DB: anakinscraper
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      retries: 5
+
+  browser-service:
+    build: ./browser-service
+    ports:
+      - "9222:9222"
+      - "8090:8080"
+    environment:
+      PORT: "9222"
+      WS_PATH: playwright
+      HEADLESS: "true"
+      HEALTH_CHECK_PORT: "8080"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 10s
+      retries: 5
+
+  server:
+    build: ./server
+    ports: ["8080:8080"]
+    restart: on-failure
+    depends_on:
+      postgres: { condition: service_healthy }
+      browser-service: { condition: service_healthy }
+    environment:
+      DATABASE_URL: postgres://postgres:postgres@postgres:5432/anakinscraper?sslmode=disable
+      BROWSER_WS_URL: ws://browser-service:9222/playwright
+      WORKER_POOL_SIZE: "5"
+      JOB_TIMEOUT: "120"
+      LOG_LEVEL: INFO
+
+volumes:
+  postgres_data:
