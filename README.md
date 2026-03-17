@@ -258,9 +258,6 @@ anakinscraper-oss/
 │           └── router/         # Route registration
 ├── browser-service/            # Python Playwright server
 ├── examples/                   # Usage examples
-├── sdks/
-│   ├── python/                 # Python SDK
-│   └── typescript/             # TypeScript SDK
 ├── docker-compose.yml          # Full stack (3 containers)
 ├── scripts/init-db.sql         # Database schema
 └── .env.example                # Config template
@@ -293,30 +290,6 @@ cd server && go test ./...
 
 ```bash
 cd server && go build -o server ./cmd/server
-```
-
-## SDKs
-
-Python and TypeScript client SDKs are included in `sdks/`. They handle job submission and polling automatically:
-
-**Python:**
-
-```python
-from anakinscraper import AnakinScraper
-
-client = AnakinScraper(base_url="http://localhost:8080")
-result = client.scrape("https://example.com")
-print(result.markdown)
-```
-
-**TypeScript:**
-
-```typescript
-import { AnakinScraper } from 'anakinscraper';
-
-const client = new AnakinScraper({ baseUrl: 'http://localhost:8080' });
-const result = await client.scrape('https://example.com');
-console.log(result.markdown);
 ```
 
 ## License
