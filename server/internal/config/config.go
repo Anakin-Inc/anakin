@@ -37,7 +37,7 @@ func Load() (*Config, error) {
 	cfg := &Config{
 		Port:            getEnvOrDefault("PORT", "8080"),
 		DatabaseURL:     os.Getenv("DATABASE_URL"),
-		BrowserWSURL:    getEnvOrDefault("BROWSER_WS_URL", "ws://localhost:9222/playwright"),
+		BrowserWSURL:    getEnvOrDefault("BROWSER_WS_URL", "ws://localhost:9222/camoufox"),
 		BrowserTimeout:  getDurationEnv("BROWSER_TIMEOUT", 60*time.Second),
 		BrowserLoadWait: getDurationEnv("BROWSER_LOAD_WAIT", 2*time.Second),
 		JobTimeout:      getDurationEnv("JOB_TIMEOUT", 120*time.Second),

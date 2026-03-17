@@ -21,7 +21,7 @@ services:
       - "8090:8080"
     environment:
       PORT: "9222"
-      WS_PATH: playwright
+      WS_PATH: camoufox
       HEADLESS: "true"
       HEALTH_CHECK_PORT: "8080"
     healthcheck:
@@ -38,7 +38,7 @@ services:
       browser-service: { condition: service_healthy }
     environment:
       DATABASE_URL: postgres://postgres:postgres@postgres:5432/anakinscraper?sslmode=disable
-      BROWSER_WS_URL: ws://browser-service:9222/playwright
+      BROWSER_WS_URL: ws://browser-service:9222/camoufox
       WORKER_POOL_SIZE: "5"
       JOB_TIMEOUT: "120"
       LOG_LEVEL: INFO

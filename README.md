@@ -10,7 +10,7 @@ Self-host with a single command. No cloud dependencies.
 - **Batch scraping** — scrape up to 10 URLs in one request
 - **Site mapping** — discover all links on a page
 - **Multi-page crawl** — crawl a site with include/exclude patterns
-- **Handler chain** — fast HTTP fetch with automatic fallback to full browser rendering
+- **Handler chain** — fast HTTP fetch with automatic fallback to [Camoufox](https://github.com/daijro/camoufox) anti-detect browser
 - **HTML to Markdown** — intelligent content extraction with boilerplate removal
 - **Self-contained** — just PostgreSQL + one Go binary + Playwright browser. No Redis, no AWS, no message queues
 
@@ -33,7 +33,7 @@ That's it. Three containers start:
 | Service | Port | Description |
 |---------|------|-------------|
 | Server | 8080 | REST API + worker pool |
-| Browser Service | 9222 | Playwright Chromium (WebSocket) |
+| Browser Service | 9222 | Camoufox anti-detect browser (WebSocket) |
 | PostgreSQL | 5432 | Job storage |
 
 ### Scrape a URL
@@ -201,12 +201,12 @@ Poll `GET /v1/crawl/:id`. Returns per-page markdown results.
 Each scrape job goes through the handler chain. On failure, it falls back to the next handler:
 
 ```
-HTTP Handler (fast, ~200ms) ──fail──▶ Browser Handler (Playwright, full JS)
+HTTP Handler (fast, ~200ms) ──fail──▶ Browser Handler (Camoufox, anti-detect Firefox)
 ```
 
 **HTTP Handler** — direct HTTP GET with a browser user-agent. Handles static HTML, server-rendered pages. No browser overhead.
 
-**Browser Handler** — connects to the Playwright browser service over WebSocket. Full JavaScript rendering, network-idle detection. Handles SPAs, lazy-loaded content, JS-rendered pages.
+**Browser Handler** — connects to [Camoufox](https://github.com/daijro/camoufox) (anti-detect Firefox) over WebSocket via Playwright protocol. Full JavaScript rendering, network-idle detection, realistic browser fingerprints. Handles SPAs, lazy-loaded content, and sites with anti-bot protection.
 
 ### Extending the Chain
 
@@ -256,7 +256,7 @@ anakinscraper-oss/
 │       └── http/
 │           ├── handlers/       # API request handlers
 │           └── router/         # Route registration
-├── browser-service/            # Python Playwright server
+├── browser-service/            # Camoufox anti-detect browser server
 ├── examples/                   # Usage examples
 ├── docker-compose.yml          # Full stack (3 containers)
 ├── scripts/init-db.sql         # Database schema

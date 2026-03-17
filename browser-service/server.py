@@ -1,9 +1,10 @@
 """
 AnakinScraper Browser Service
 
-Launches a Playwright Chromium browser in server mode, exposing a WebSocket
-endpoint for remote browser automation. Includes a health-check HTTP server
-and a watchdog that restarts the browser on crash with exponential backoff.
+Launches a Camoufox (anti-detect Firefox) browser in server mode, exposing a
+Playwright-compatible WebSocket endpoint for remote browser automation.
+Includes a health-check HTTP server and a watchdog that restarts the browser
+on crash with exponential backoff.
 """
 
 import logging
@@ -28,7 +29,7 @@ logger = logging.getLogger("browser-service")
 # ---------------------------------------------------------------------------
 
 PORT = int(os.environ.get("PORT", "9222"))
-WS_PATH = os.environ.get("WS_PATH", "playwright")
+WS_PATH = os.environ.get("WS_PATH", "camoufox")
 HEALTH_CHECK_PORT = int(os.environ.get("HEALTH_CHECK_PORT", "8080"))
 HEADLESS = os.environ.get("HEADLESS", "true").lower() == "true"
 
@@ -55,8 +56,6 @@ lock = threading.Lock()
 
 
 class HealthHandler(BaseHTTPRequestHandler):
-    """Minimal HTTP handler that serves /health."""
-
     def do_GET(self):  # noqa: N802
         if self.path == "/health":
             is_running = browser_running.is_set()
@@ -67,21 +66,16 @@ class HealthHandler(BaseHTTPRequestHandler):
             self.send_response(200 if is_running else 503)
             self.send_header("Content-Type", "application/json")
             self.end_headers()
-            self.write_body(body)
+            self.wfile.write(body.encode())
         else:
             self.send_response(404)
             self.end_headers()
 
-    def write_body(self, body: str):
-        self.wfile.write(body.encode())
-
     def log_message(self, format, *args):  # noqa: A002
-        # Silence default access logs to reduce noise
         pass
 
 
 def start_health_server():
-    """Run the health-check HTTP server in a daemon thread."""
     server = HTTPServer(("0.0.0.0", HEALTH_CHECK_PORT), HealthHandler)
     server.timeout = 1
     logger.info("Health-check server listening on :%d", HEALTH_CHECK_PORT)
@@ -95,19 +89,28 @@ def start_health_server():
 
 
 def build_launch_command() -> list[str]:
-    """Build the command to start Playwright's Chromium server."""
+    """Build the command to start the Camoufox server."""
     cmd = [
-        sys.executable, "-m", "playwright", "run-server",
+        sys.executable, "-m", "camoufox", "server",
         "--port", str(PORT),
         "--path", f"/{WS_PATH}",
         "--host", "0.0.0.0",
     ]
 
+    if HEADLESS:
+        cmd.append("--headless")
+
+    if PROXY_SERVER:
+        cmd.extend(["--proxy-server", PROXY_SERVER])
+        if PROXY_USERNAME:
+            cmd.extend(["--proxy-username", PROXY_USERNAME])
+        if PROXY_PASSWORD:
+            cmd.extend(["--proxy-password", PROXY_PASSWORD])
+
     return cmd
 
 
 def start_browser() -> subprocess.Popen:
-    """Start the Playwright browser server subprocess."""
     cmd = build_launch_command()
     logger.info("Starting browser: %s", " ".join(cmd))
     proc = subprocess.Popen(
@@ -119,7 +122,6 @@ def start_browser() -> subprocess.Popen:
 
 
 def stream_output(proc: subprocess.Popen):
-    """Stream subprocess stdout to our logger."""
     if proc.stdout is None:
         return
     for line in iter(proc.stdout.readline, b""):
@@ -129,10 +131,6 @@ def stream_output(proc: subprocess.Popen):
 
 
 def watchdog():
-    """
-    Main watchdog loop.
-    Starts the browser and restarts it on crash with exponential backoff.
-    """
     global browser_process
     backoff = INITIAL_BACKOFF
 
@@ -141,16 +139,14 @@ def watchdog():
         with lock:
             browser_process = proc
 
-        # Give the browser a moment to start, then mark as running
-        time.sleep(1)
+        time.sleep(2)
         if proc.poll() is None:
             browser_running.set()
             logger.info(
                 "Browser is running on ws://0.0.0.0:%d/%s", PORT, WS_PATH
             )
-            backoff = INITIAL_BACKOFF  # reset on successful start
+            backoff = INITIAL_BACKOFF
 
-        # Stream output (blocks until process exits)
         stream_output(proc)
         proc.wait()
 
@@ -167,7 +163,6 @@ def watchdog():
             backoff,
         )
 
-        # Wait with backoff, but remain responsive to shutdown
         for _ in range(int(backoff * 10)):
             if shutdown_event.is_set():
                 return
@@ -181,7 +176,6 @@ def watchdog():
 
 
 def handle_shutdown(signum, frame):
-    """Handle SIGTERM / SIGINT for graceful shutdown."""
     sig_name = signal.Signals(signum).name
     logger.info("Received %s, shutting down...", sig_name)
     shutdown_event.set()
@@ -208,17 +202,15 @@ def main():
     signal.signal(signal.SIGTERM, handle_shutdown)
     signal.signal(signal.SIGINT, handle_shutdown)
 
-    logger.info("AnakinScraper Browser Service starting")
+    logger.info("AnakinScraper Browser Service (Camoufox) starting")
     logger.info("  WebSocket : ws://0.0.0.0:%d/%s", PORT, WS_PATH)
     logger.info("  Health    : http://0.0.0.0:%d/health", HEALTH_CHECK_PORT)
     logger.info("  Headless  : %s", HEADLESS)
     logger.info("  Proxy     : %s", PROXY_SERVER or "(none)")
 
-    # Start health-check server in background thread
     health_thread = threading.Thread(target=start_health_server, daemon=True)
     health_thread.start()
 
-    # Run watchdog in main thread
     watchdog()
 
 
