@@ -43,3 +43,4 @@ docker-compose.override.yml
 tmp/
 *.log
 */anakinscraper
+.gstack/
