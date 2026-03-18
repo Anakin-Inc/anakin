@@ -7,9 +7,9 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 
-	"github.com/AnakinAI/anakinscraper-oss/server/internal/http/handlers"
-	"github.com/AnakinAI/anakinscraper-oss/server/internal/proxy"
-	"github.com/AnakinAI/anakinscraper-oss/server/internal/worker"
+	"github.com/Anakin-Inc/anakinscraper-oss/server/internal/http/handlers"
+	"github.com/Anakin-Inc/anakinscraper-oss/server/internal/proxy"
+	"github.com/Anakin-Inc/anakinscraper-oss/server/internal/worker"
 )
 
 // Setup configures all routes.

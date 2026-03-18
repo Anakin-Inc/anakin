@@ -19,14 +19,14 @@ import (
 	"github.com/joho/godotenv"
 	_ "github.com/lib/pq"
 
-	"github.com/AnakinAI/anakinscraper-oss/server/internal/config"
-	"github.com/AnakinAI/anakinscraper-oss/server/internal/domain"
-	"github.com/AnakinAI/anakinscraper-oss/server/internal/gemini"
-	"github.com/AnakinAI/anakinscraper-oss/server/internal/handler"
-	"github.com/AnakinAI/anakinscraper-oss/server/internal/http/router"
-	"github.com/AnakinAI/anakinscraper-oss/server/internal/processor"
-	"github.com/AnakinAI/anakinscraper-oss/server/internal/proxy"
-	"github.com/AnakinAI/anakinscraper-oss/server/internal/worker"
+	"github.com/Anakin-Inc/anakinscraper-oss/server/internal/config"
+	"github.com/Anakin-Inc/anakinscraper-oss/server/internal/domain"
+	"github.com/Anakin-Inc/anakinscraper-oss/server/internal/gemini"
+	"github.com/Anakin-Inc/anakinscraper-oss/server/internal/handler"
+	"github.com/Anakin-Inc/anakinscraper-oss/server/internal/http/router"
+	"github.com/Anakin-Inc/anakinscraper-oss/server/internal/processor"
+	"github.com/Anakin-Inc/anakinscraper-oss/server/internal/proxy"
+	"github.com/Anakin-Inc/anakinscraper-oss/server/internal/worker"
 )
 
 func main() {
@@ -119,7 +119,7 @@ func main() {
 	fmt.Println("")
 	fmt.Println("━━━ AnakinScraper OSS v0.1.0 ━━━")
 	fmt.Printf("  API:     http://localhost:%s\n", cfg.Port)
-	fmt.Println("  Docs:    https://github.com/AnakinAI/anakinscraper-oss")
+	fmt.Println("  Docs:    https://github.com/Anakin-Inc/anakinscraper-oss")
 	fmt.Println("  Hosted:  https://anakin.io (geo-proxies, caching, search, research)")
 	fmt.Println("")
 

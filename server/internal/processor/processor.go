@@ -12,12 +12,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/AnakinAI/anakinscraper-oss/server/internal/converter"
-	"github.com/AnakinAI/anakinscraper-oss/server/internal/domain"
-	"github.com/AnakinAI/anakinscraper-oss/server/internal/gemini"
-	"github.com/AnakinAI/anakinscraper-oss/server/internal/handler"
-	"github.com/AnakinAI/anakinscraper-oss/server/internal/models"
-	"github.com/AnakinAI/anakinscraper-oss/server/internal/proxy"
+	"github.com/Anakin-Inc/anakinscraper-oss/server/internal/converter"
+	"github.com/Anakin-Inc/anakinscraper-oss/server/internal/domain"
+	"github.com/Anakin-Inc/anakinscraper-oss/server/internal/gemini"
+	"github.com/Anakin-Inc/anakinscraper-oss/server/internal/handler"
+	"github.com/Anakin-Inc/anakinscraper-oss/server/internal/models"
+	"github.com/Anakin-Inc/anakinscraper-oss/server/internal/proxy"
 )
 
 // Processor handles individual scraping jobs.

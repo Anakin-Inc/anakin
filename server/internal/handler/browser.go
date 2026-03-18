@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/AnakinAI/anakinscraper-oss/server/internal/models"
+	"github.com/Anakin-Inc/anakinscraper-oss/server/internal/models"
 	"github.com/playwright-community/playwright-go"
 )
 

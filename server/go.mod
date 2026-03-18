@@ -1,4 +1,4 @@
-module github.com/AnakinAI/anakinscraper-oss/server
+module github.com/Anakin-Inc/anakinscraper-oss/server
 
 go 1.25.0
 

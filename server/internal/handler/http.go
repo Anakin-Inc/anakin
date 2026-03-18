@@ -10,7 +10,7 @@ import (
 	"net/url"
 	"time"
 
-	"github.com/AnakinAI/anakinscraper-oss/server/internal/models"
+	"github.com/Anakin-Inc/anakinscraper-oss/server/internal/models"
 )
 
 const defaultUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"

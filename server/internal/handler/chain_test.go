@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/AnakinAI/anakinscraper-oss/server/internal/models"
+	"github.com/Anakin-Inc/anakinscraper-oss/server/internal/models"
 )
 
 // mockHandler is a minimal ScrapingHandler for testing the chain logic.

@@ -8,7 +8,7 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/AnakinAI/anakinscraper-oss/server/internal/models"
+	"github.com/Anakin-Inc/anakinscraper-oss/server/internal/models"
 )
 
 // Chain orchestrates handler execution with fallback.

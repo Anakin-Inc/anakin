@@ -13,8 +13,8 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
 
-	"github.com/AnakinAI/anakinscraper-oss/server/internal/models"
-	"github.com/AnakinAI/anakinscraper-oss/server/internal/worker"
+	"github.com/Anakin-Inc/anakinscraper-oss/server/internal/models"
+	"github.com/Anakin-Inc/anakinscraper-oss/server/internal/worker"
 )
 
 type ScraperHandler struct {

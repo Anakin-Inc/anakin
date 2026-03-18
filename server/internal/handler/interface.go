@@ -5,7 +5,7 @@ package handler
 import (
 	"context"
 
-	"github.com/AnakinAI/anakinscraper-oss/server/internal/models"
+	"github.com/Anakin-Inc/anakinscraper-oss/server/internal/models"
 )
 
 // ScrapingHandler defines the contract for scraping implementations.

@@ -7,9 +7,9 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 
-	"github.com/AnakinAI/anakinscraper-oss/server/internal/domain"
-	"github.com/AnakinAI/anakinscraper-oss/server/internal/models"
-	"github.com/AnakinAI/anakinscraper-oss/server/internal/proxy"
+	"github.com/Anakin-Inc/anakinscraper-oss/server/internal/domain"
+	"github.com/Anakin-Inc/anakinscraper-oss/server/internal/models"
+	"github.com/Anakin-Inc/anakinscraper-oss/server/internal/proxy"
 )
 
 type DomainConfigHandler struct {

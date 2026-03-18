@@ -18,8 +18,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/AnakinAI/anakinscraper-oss/server/internal/handler"
-	"github.com/AnakinAI/anakinscraper-oss/server/internal/models"
+	"github.com/Anakin-Inc/anakinscraper-oss/server/internal/handler"
+	"github.com/Anakin-Inc/anakinscraper-oss/server/internal/models"
 )
 
 // -----------------------------------------------------------------------

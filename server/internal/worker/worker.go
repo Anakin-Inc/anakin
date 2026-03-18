@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/AnakinAI/anakinscraper-oss/server/internal/models"
+	"github.com/Anakin-Inc/anakinscraper-oss/server/internal/models"
 )
 
 // JobHandler processes a single job message.
