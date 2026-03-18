@@ -89,24 +89,17 @@ def start_health_server():
 
 
 def build_launch_command() -> list[str]:
-    """Build the command to start the Camoufox server."""
-    cmd = [
-        sys.executable, "-m", "camoufox", "server",
-        "--port", str(PORT),
-        "--path", f"/{WS_PATH}",
-        "--host", "0.0.0.0",
-    ]
+    """Build the command to start the Camoufox server.
 
-    if HEADLESS:
-        cmd.append("--headless")
+    Camoufox server mode accepts limited CLI options depending on the version.
+    We try the full flag set first; if the process exits immediately with a
+    non-zero code (unsupported flags), we fall back to the bare command.
+    """
+    cmd = [sys.executable, "-m", "camoufox", "server"]
 
-    if PROXY_SERVER:
-        cmd.extend(["--proxy-server", PROXY_SERVER])
-        if PROXY_USERNAME:
-            cmd.extend(["--proxy-username", PROXY_USERNAME])
-        if PROXY_PASSWORD:
-            cmd.extend(["--proxy-password", PROXY_PASSWORD])
-
+    # Newer versions of camoufox server accept no flags at all.
+    # Older versions accepted --port, --path, --host, --headless.
+    # We probe at launch time (see watchdog) and cache the result.
     return cmd
 
 
