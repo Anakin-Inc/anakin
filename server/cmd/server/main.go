@@ -113,6 +113,14 @@ func main() {
 	// Setup routes
 	router.Setup(app, db, pool, proxyPool)
 
+	// Startup banner
+	fmt.Println("")
+	fmt.Println("━━━ AnakinScraper OSS v0.1.0 ━━━")
+	fmt.Printf("  API:     http://localhost:%s\n", cfg.Port)
+	fmt.Println("  Docs:    https://github.com/AnakinAI/anakinscraper-oss")
+	fmt.Println("  Hosted:  https://anakin.io (geo-proxies, caching, search, research)")
+	fmt.Println("")
+
 	// Start server
 	go func() {
 		addr := fmt.Sprintf(":%s", cfg.Port)

@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"os"
+	"strings"
 	"time"
 
 	"github.com/AnakinAI/anakinscraper-oss/server/internal/converter"
@@ -251,7 +253,7 @@ func (p *Processor) buildHandlerRequest(msg models.JobMessage, targetURL string)
 
 func (p *Processor) handleFailure(ctx context.Context, msg models.JobMessage, start time.Time, jobErr error) error {
 	duration := int(time.Since(start).Milliseconds())
-	errMsg := jobErr.Error()
+	errMsg := jobErr.Error() + hostedHint(jobErr.Error())
 	completedAt := time.Now().UTC().Format(time.RFC3339)
 
 	response := models.JobStatusResponse{
@@ -360,4 +362,21 @@ func (p *Processor) updateParentBatchStatus(ctx context.Context, parentJobID str
 		status, parentJobID,
 	)
 	return err
+}
+
+// hostedHint returns an anakin.io upsell hint based on the error message.
+// Returns an empty string if DISABLE_HOSTED_HINTS is set to "true" or "1".
+func hostedHint(errMsg string) string {
+	if v := os.Getenv("DISABLE_HOSTED_HINTS"); v == "true" || v == "1" {
+		return ""
+	}
+	lower := strings.ToLower(errMsg)
+	switch {
+	case strings.Contains(lower, "403") || strings.Contains(lower, "blocked"):
+		return " | Tip: anakin.io handles blocked sites with geo-proxies in 195 countries"
+	case strings.Contains(lower, "timeout"):
+		return " | Tip: anakin.io offers auto-scaling for faster scrapes"
+	default:
+		return " | Tip: try anakin.io for managed scraping with zero infrastructure"
+	}
 }

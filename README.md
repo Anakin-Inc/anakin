@@ -199,6 +199,7 @@ All configuration via environment variables:
 | `PROXY_URLS` | — | Comma-separated proxy pool for auto-selection (Thompson Sampling) |
 | `GEMINI_API_KEY` | — | Google Gemini API key for structured JSON extraction ([get one free](https://aistudio.google.com/apikey)) |
 | `LOG_LEVEL` | `INFO` | Log level (DEBUG, INFO, WARN, ERROR) |
+| `DISABLE_HOSTED_HINTS` | — | Set to `true` to suppress hosted service tips in error messages |
 
 ## Project Structure
 
@@ -219,10 +220,8 @@ anakinscraper-oss/
 │       └── http/
 │           ├── handlers/       # API request handlers
 │           └── router/         # Route registration
-├── cli/                        # Go CLI tool
-├── mcp-server/                 # MCP server for Claude/Cursor/VS Code
-├── openclaw-skill/             # OpenClaw skill wrapper
 ├── browser-service/            # Camoufox anti-detect browser server
+├── openclaw-skill/             # OpenClaw skill wrapper
 ├── examples/                   # Usage examples
 ├── docker-compose.yml          # Full stack (3 containers)
 ├── scripts/init-db.sql         # Database schema
@@ -260,52 +259,31 @@ cd server && go build -o server ./cmd/server
 
 ## CLI
 
-Scrape websites from your terminal:
+Use the [Anakin CLI](https://github.com/Anakin-Inc/anakin-cli) to scrape from your terminal. It works against both self-hosted and the [hosted API](https://anakin.io):
 
 ```bash
 # Install
-go install github.com/AnakinAI/anakinscraper-oss/cli@latest
+pip install anakin-cli
 
-# Scrape a URL (prints markdown)
-anakinscraper scrape https://example.com
+# Scrape via your local instance (no API key needed)
+anakin scrape "https://example.com" --api-url http://localhost:8080
+
+# Or set it as your default
+export ANAKIN_API_URL="http://localhost:8080"
+anakin scrape "https://example.com"
 
 # Extract structured JSON
-anakinscraper scrape --extract https://example.com
+anakin scrape "https://example.com" --format json --api-url http://localhost:8080
 
 # Batch scrape
-anakinscraper batch https://example.com https://httpbin.org/html
-
-# Full JSON output
-anakinscraper scrape --json https://example.com
+anakin scrape-batch "https://example.com" "https://httpbin.org/html" --api-url http://localhost:8080
 ```
 
-See [cli/README.md](cli/README.md) for full usage.
+The same CLI also supports **AI web search** and **deep research** via the hosted API — [get a free API key](https://anakin.io/dashboard) to unlock those features.
+
+See the [anakin-cli repo](https://github.com/Anakin-Inc/anakin-cli) for full usage.
 
 ## Integrations
-
-### MCP Server (Claude, Cursor, VS Code, Windsurf)
-
-Add AnakinScraper as a tool for AI agents. Build it once, then point your editor to the local server:
-
-```bash
-cd mcp-server && npm install && npm run build
-```
-
-Add to your Claude Desktop / Cursor config:
-
-```json
-{
-  "mcpServers": {
-    "anakinscraper": {
-      "command": "node",
-      "args": ["/path/to/anakinscraper-oss/mcp-server/dist/index.js"],
-      "env": { "ANAKINSCRAPER_API_URL": "http://localhost:8080" }
-    }
-  }
-}
-```
-
-See [mcp-server/README.md](mcp-server/README.md) for details.
 
 ### OpenClaw Skill
 
@@ -317,6 +295,35 @@ cp -r openclaw-skill ~/.openclaw/workspace/skills/anakinscraper
 
 See [openclaw-skill/SKILL.md](openclaw-skill/SKILL.md).
 
+## Self-Hosted vs Hosted
+
+This repo gives you the full scraping engine. [anakin.io](https://anakin.io) adds the infrastructure you'd otherwise build yourself:
+
+| Feature | Self-Hosted (this repo) | Hosted ([anakin.io](https://anakin.io)) |
+|---------|------------------------|----------------------------------------|
+| Sync + async scraping | Yes | Yes |
+| Batch scraping | Yes | Yes |
+| Anti-detect browser | Yes | Yes |
+| Structured JSON extraction | Yes (bring your own Gemini key) | Yes (built-in) |
+| Domain configs | Yes | Yes |
+| Proxy auto-selection | Yes (bring your own proxies) | Yes (195 countries included) |
+| Geo-targeted proxies | — | 195 countries |
+| Response caching | — | Built-in |
+| Rate limiting | — | Built-in |
+| AI web search | — | Yes |
+| Deep agentic research | — | Yes |
+| Auto-scaling | — | Yes |
+| Zero infrastructure | — | Yes |
+
+**Already self-hosting?** Switch to hosted with one line — same API, same CLI:
+
+```bash
+anakin login --api-key "ak-xxx"   # get your key at anakin.io/dashboard
+anakin scrape "https://example.com"  # now routes through hosted
+```
+
+[Try it free →](https://anakin.io)
+
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md).
@@ -324,12 +331,6 @@ See [CONTRIBUTING.md](CONTRIBUTING.md).
 ## License
 
 [AGPL-3.0](LICENSE) — free to self-host. If you modify the code and offer it as a hosted service, you must open-source your changes.
-
----
-
-### Want managed scraping?
-
-[anakin.io](https://anakin.io) offers everything in this repo plus geo-proxies in 195 countries, built-in caching, rate limiting, and zero infrastructure to manage. [Try it free →](https://anakin.io)
 
 ---
 
