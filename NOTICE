@@ -1,0 +1,23 @@
+AnakinScraper OSS
+Copyright (c) 2025 Anakin.io
+
+Licensed under the GNU Affero General Public License v3.0 (AGPL-3.0).
+See LICENSE for the full license text.
+
+This product includes software developed by third parties:
+
+Go Dependencies:
+  - Fiber (github.com/gofiber/fiber/v2) — MIT License
+  - html-to-markdown (github.com/JohannesKaufmann/html-to-markdown/v2) — MIT License
+  - GoQuery (github.com/PuerkitoBio/goquery) — BSD 3-Clause License
+  - uuid (github.com/google/uuid) — BSD 3-Clause License
+  - godotenv (github.com/joho/godotenv) — MIT License
+  - pq (github.com/lib/pq) — PostgreSQL License
+  - playwright-go (github.com/playwright-community/playwright-go) — Apache 2.0 License
+  - fasthttp (github.com/valyala/fasthttp) — MIT License
+  - brotli (github.com/andybalholm/brotli) — MIT License
+  - compress (github.com/klauspost/compress) — Apache 2.0 / BSD 3-Clause License
+  - golang.org/x/net — BSD 3-Clause License
+
+Python Dependencies:
+  - Camoufox (github.com/daijro/camoufox) — MIT License

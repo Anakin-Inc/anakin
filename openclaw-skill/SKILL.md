@@ -2,6 +2,7 @@
 name: anakinscraper
 description: Scrape any website into clean markdown or structured JSON. Anti-detect browser, smart proxy rotation, AI-powered data extraction.
 version: 1.0.0
+license: AGPL-3.0
 user-invocable: true
 metadata: {"openclaw":{"requires":{"bins":["node"]},"emoji":"🕷️","homepage":"https://github.com/AnakinAI/anakinscraper-oss"}}
 ---
