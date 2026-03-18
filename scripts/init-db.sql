@@ -60,3 +60,7 @@ CREATE TABLE IF NOT EXISTS proxy_scores (
     last_updated TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
     PRIMARY KEY (proxy_url, target_host)
 );
+
+CREATE INDEX IF NOT EXISTS idx_scrape_requests_created ON scrape_requests(created_at);
+CREATE INDEX IF NOT EXISTS idx_scrape_requests_url ON scrape_requests(url);
+CREATE INDEX IF NOT EXISTS idx_proxy_scores_host ON proxy_scores(target_host);

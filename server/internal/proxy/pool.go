@@ -9,10 +9,11 @@ import (
 )
 
 const (
-	blockedTTL      = 5 * time.Minute
-	severePenalty   = 10
-	latencyEMA      = 0.2
-	persistInterval = 60 * time.Second
+	blockedTTL       = 5 * time.Minute
+	severePenalty    = 10
+	latencyEMA       = 0.2
+	persistInterval  = 60 * time.Second
+	scoreEvictionTTL = 24 * time.Hour
 )
 
 // Pool manages proxy selection using Thompson Sampling.
@@ -270,4 +271,19 @@ func (p *Pool) persistScores() {
 		}
 	}
 	slog.Debug("persisted proxy scores", "count", len(allScores))
+
+	// Evict stale scores
+	now := time.Now()
+	p.mu.Lock()
+	for host, proxies := range p.scores {
+		for proxyURL, score := range proxies {
+			if now.Sub(score.LastUpdated) > scoreEvictionTTL {
+				delete(proxies, proxyURL)
+			}
+		}
+		if len(proxies) == 0 {
+			delete(p.scores, host)
+		}
+	}
+	p.mu.Unlock()
 }

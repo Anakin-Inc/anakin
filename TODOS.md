@@ -10,3 +10,14 @@
 
 **Effort:** S
 **Depends on:** Unified anakin-cli changes (completed)
+
+## P3: Cache compiled regexes in domain config
+
+**What:** Compile regex patterns (failure_patterns, required_patterns) once at DomainConfig load time instead of on every job check.
+
+**Why:** Currently `regexp.Compile()` is called on every job for every pattern in domain/detector.go. For 100 jobs with 5 patterns, that's 500 compilations. Caching at load time gives 10-50x throughput improvement for regex-heavy configs.
+
+**How to apply:** Add `[]*regexp.Regexp` fields to DomainConfig struct. Compile patterns in repository.go when loading from DB. Use pre-compiled regexes in detector.go.
+
+**Effort:** S (human: ~2 hours / CC: ~10 min)
+**Depends on:** Nothing

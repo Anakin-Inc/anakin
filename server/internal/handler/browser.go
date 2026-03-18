@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"sync"
 	"time"
 
 	"github.com/AnakinAI/anakinscraper-oss/server/internal/models"
@@ -12,11 +13,12 @@ import (
 
 // BrowserHandler implements ScrapingHandler using Playwright browser automation.
 type BrowserHandler struct {
-	wsURL       string
-	timeout     time.Duration
-	loadWait    time.Duration
-	pw          *playwright.Playwright
-	initialized bool
+	wsURL    string
+	timeout  time.Duration
+	loadWait time.Duration
+	pw       *playwright.Playwright
+	once     sync.Once
+	initErr  error
 }
 
 func NewBrowserHandler(wsURL string, timeout, loadWait time.Duration) *BrowserHandler {
@@ -31,30 +33,20 @@ func (h *BrowserHandler) Name() string                                          
 func (h *BrowserHandler) CanHandle(_ context.Context, _ *models.HandlerRequest) bool { return true }
 
 func (h *BrowserHandler) IsHealthy() bool {
-	if h.initialized {
-		return true
-	}
-	pw, err := playwright.Run()
-	if err != nil {
-		slog.Warn("playwright driver not available", "error", err)
-		return false
-	}
-	h.pw = pw
-	h.initialized = true
-	return true
+	h.ensurePlaywright()
+	return h.initErr == nil
 }
 
 func (h *BrowserHandler) ensurePlaywright() error {
-	if h.initialized && h.pw != nil {
-		return nil
-	}
-	pw, err := playwright.Run()
-	if err != nil {
-		return fmt.Errorf("failed to start playwright: %w", err)
-	}
-	h.pw = pw
-	h.initialized = true
-	return nil
+	h.once.Do(func() {
+		pw, err := playwright.Run()
+		if err != nil {
+			h.initErr = fmt.Errorf("failed to start playwright: %w", err)
+			return
+		}
+		h.pw = pw
+	})
+	return h.initErr
 }
 
 func (h *BrowserHandler) Scrape(ctx context.Context, req *models.HandlerRequest) (*models.ScrapeResult, error) {
@@ -123,6 +115,5 @@ func (h *BrowserHandler) Stop() {
 		if err := h.pw.Stop(); err != nil {
 			slog.Warn("failed to stop playwright", "error", err)
 		}
-		h.initialized = false
 	}
 }
