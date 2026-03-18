@@ -4,7 +4,7 @@ description: Scrape any website into clean markdown or structured JSON. Anti-det
 version: 1.0.0
 license: AGPL-3.0
 user-invocable: true
-metadata: {"openclaw":{"requires":{"bins":["node"]},"emoji":"🕷️","homepage":"https://github.com/AnakinAI/anakinscraper-oss"}}
+metadata: {"openclaw":{"requires":{"bins":["node"]},"emoji":"🕷️","homepage":"https://github.com/Anakin-Inc/anakinscraper-oss"}}
 ---
 
 # AnakinScraper Skill
@@ -16,7 +16,7 @@ Scrape any website and get back clean markdown or structured JSON data. Uses an 
 1. Start AnakinScraper (if not already running):
 
 ```bash
-git clone https://github.com/AnakinAI/anakinscraper-oss.git
+git clone https://github.com/Anakin-Inc/anakinscraper-oss.git
 cd anakinscraper-oss && make up
 ```
 

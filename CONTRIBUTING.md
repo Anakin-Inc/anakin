@@ -6,7 +6,7 @@ Thanks for your interest in contributing! Here's how to get started.
 
 ```bash
 # Clone the repo
-git clone https://github.com/AnakinAI/anakinscraper-oss.git
+git clone https://github.com/Anakin-Inc/anakinscraper-oss.git
 cd anakinscraper-oss
 
 # Start full stack (3 containers)

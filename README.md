@@ -1,6 +1,6 @@
 # AnakinScraper OSS
 
-[![CI](https://github.com/AnakinAI/anakinscraper-oss/actions/workflows/ci.yml/badge.svg)](https://github.com/AnakinAI/anakinscraper-oss/actions/workflows/ci.yml)
+[![CI](https://github.com/Anakin-Inc/anakinscraper-oss/actions/workflows/ci.yml/badge.svg)](https://github.com/Anakin-Inc/anakinscraper-oss/actions/workflows/ci.yml)
 [![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL--3.0-blue.svg)](LICENSE)
 
 The open-source web scraping API for AI. Turn any website into LLM-ready markdown or structured data.
@@ -8,7 +8,7 @@ The open-source web scraping API for AI. Turn any website into LLM-ready markdow
 Self-host with a single command. No cloud dependencies. Powers RAG pipelines, AI agents, and data extraction at scale.
 
 ```bash
-git clone https://github.com/AnakinAI/anakinscraper-oss.git && cd anakinscraper-oss && make up
+git clone https://github.com/Anakin-Inc/anakinscraper-oss.git && cd anakinscraper-oss && make up
 
 # Scrape any website — one curl, full result:
 curl -s -X POST http://localhost:8080/v1/scrape \
@@ -36,7 +36,7 @@ curl -s -X POST http://localhost:8080/v1/scrape \
 ### Start
 
 ```bash
-git clone https://github.com/AnakinAI/anakinscraper-oss.git
+git clone https://github.com/Anakin-Inc/anakinscraper-oss.git
 cd anakinscraper-oss
 make up
 ```
