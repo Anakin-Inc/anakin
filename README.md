@@ -2,6 +2,10 @@
 
 [![CI](https://github.com/Anakin-Inc/anakinscraper-oss/actions/workflows/ci.yml/badge.svg)](https://github.com/Anakin-Inc/anakinscraper-oss/actions/workflows/ci.yml)
 [![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL--3.0-blue.svg)](LICENSE)
+[![Go](https://img.shields.io/badge/Go-1.25-00ADD8?logo=go&logoColor=white)](https://go.dev)
+[![Python](https://img.shields.io/badge/Python-3.11-3776AB?logo=python&logoColor=white)](https://python.org)
+[![Docker](https://img.shields.io/badge/Docker-Ready-2496ED?logo=docker&logoColor=white)](docker-compose.yml)
+[![React](https://img.shields.io/badge/Web_UI-React_19-61DAFB?logo=react&logoColor=white)](webapp/)
 
 The open-source web scraping API for AI. Turn any website into LLM-ready markdown or structured data.
 
@@ -25,6 +29,7 @@ curl -s -X POST http://localhost:8080/v1/scrape \
 - **Proxy auto-select** — [Thompson Sampling](https://en.wikipedia.org/wiki/Thompson_sampling) picks the best proxy per domain from a pool, learning from success/failure
 - **Structured JSON extraction** — use Gemini AI to extract structured data from any page (bring your own API key)
 - **HTML to Markdown** — intelligent content extraction with boilerplate removal
+- **Web dashboard** — built-in React UI for scraping, job tracking, domain config management, and proxy monitoring
 - **Self-contained** — just PostgreSQL + one Go binary + anti-detect browser. No Redis, no AWS, no message queues
 
 ## Quick Start
@@ -48,6 +53,18 @@ That's it. Three containers start:
 | Server | 8080 | REST API + worker pool |
 | Browser Service | 9222 | Camoufox anti-detect browser (WebSocket) |
 | PostgreSQL | 5432 | Job storage |
+
+### Web Dashboard
+
+A built-in web UI is included for visual scraping, job tracking, and configuration:
+
+```bash
+cd webapp && npm install && npm run dev
+```
+
+Open [http://localhost:3000](http://localhost:3000) — the dashboard proxies API calls to the server on port 8080.
+
+Pages: **Dashboard** (health + quick scrape) | **Scrape** (sync/async/batch with live results) | **Jobs** (tracked history with status filters) | **Domain Configs** (CRUD with handler chain management) | **Proxy Scores** (Thompson Sampling performance)
 
 ### Scrape a URL
 
@@ -221,6 +238,7 @@ anakinscraper-oss/
 │           ├── handlers/       # API request handlers
 │           └── router/         # Route registration
 ├── browser-service/            # Camoufox anti-detect browser server
+├── webapp/                     # React web dashboard (Vite + Tailwind)
 ├── openclaw-skill/             # OpenClaw skill wrapper
 ├── examples/                   # Usage examples
 ├── docker-compose.yml          # Full stack (3 containers)
@@ -232,7 +250,7 @@ anakinscraper-oss/
 
 ### Running Locally (without Docker)
 
-**Prerequisites:** Go 1.22+, Python 3.11+, PostgreSQL
+**Prerequisites:** Go 1.25+, Python 3.11+, Node.js 18+, PostgreSQL
 
 ```bash
 # Terminal 1: PostgreSQL (if not running)

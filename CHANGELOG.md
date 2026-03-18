@@ -15,8 +15,8 @@ Initial open-source release.
 - **HTML to Markdown** — intelligent content extraction with boilerplate removal
 
 ### Tools
-- **CLI** — `anakinscraper scrape/batch/health` commands
-- **MCP server** — Claude Desktop, Cursor, VS Code, Windsurf integration
+- **CLI** — `anakin scrape/batch/health` commands ([anakin-cli](https://github.com/Anakin-Inc/anakin-cli))
+- **Web dashboard** — React UI for scraping, job tracking, domain configs, proxy monitoring
 - **OpenClaw skill** — AI agent integration
 
 ### Infrastructure

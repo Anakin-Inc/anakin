@@ -20,27 +20,13 @@ git clone https://github.com/Anakin-Inc/anakinscraper-oss.git
 cd anakinscraper-oss && make up
 ```
 
-2. Build the MCP server:
+2. Copy the skill into your OpenClaw workspace:
 
 ```bash
-cd anakinscraper-oss/mcp-server && npm install && npm run build
+cp -r openclaw-skill ~/.openclaw/workspace/skills/anakinscraper
 ```
 
-3. Add the MCP server to your OpenClaw config (`~/.openclaw/config.json`):
-
-```json
-{
-  "mcpServers": {
-    "anakinscraper": {
-      "command": "node",
-      "args": ["/path/to/anakinscraper-oss/mcp-server/dist/index.js"],
-      "env": {
-        "ANAKINSCRAPER_API_URL": "http://localhost:8080"
-      }
-    }
-  }
-}
-```
+The skill calls the AnakinScraper REST API at `http://localhost:8080` directly. No additional build step required.
 
 ## Available Tools
 
