@@ -90,28 +90,60 @@ def start_health_server():
 # ---------------------------------------------------------------------------
 
 
-def build_launch_command() -> list[str]:
-    """Build the command to start the Camoufox server.
+def run_browser():
+    """Run Camoufox browser server via its Python API.
 
-    Camoufox server mode accepts limited CLI options depending on the version.
-    We try the full flag set first; if the process exits immediately with a
-    non-zero code (unsupported flags), we fall back to the bare command.
+    Uses the official launch_server() with port and ws_path parameters
+    so the WebSocket endpoint is deterministic (ws://0.0.0.0:PORT/WS_PATH).
+
+    Monkey-patches launch_options to strip None values from the config
+    dict before it reaches the browser binary.  Camoufox's launch_options()
+    always includes ``proxy: None`` which serialises to JSON ``null`` and
+    the browser rejects with "proxy: expected object, got null".
     """
-    cmd = [sys.executable, "-m", "camoufox", "server"]
+    import camoufox.server as _srv  # noqa: E402
 
-    # Newer versions of camoufox server accept no flags at all.
-    # Older versions accepted --port, --path, --host, --headless.
-    # We probe at launch time (see watchdog) and cache the result.
-    return cmd
+    _orig_launch_options = _srv.launch_options
+
+    def _patched_launch_options(**kwargs):
+        config = _orig_launch_options(**kwargs)
+        return {k: v for k, v in config.items() if v is not None}
+
+    _srv.launch_options = _patched_launch_options
+
+    kwargs: dict = {
+        "headless": HEADLESS,
+        "port": PORT,
+        "ws_path": WS_PATH,
+    }
+
+    if PROXY_SERVER:
+        kwargs["proxy"] = {
+            "server": PROXY_SERVER,
+            **({"username": PROXY_USERNAME} if PROXY_USERNAME else {}),
+            **({"password": PROXY_PASSWORD} if PROXY_PASSWORD else {}),
+        }
+
+    logger.info(
+        "Launching camoufox server (headless=%s, port=%d, ws_path=%s)",
+        HEADLESS, PORT, WS_PATH,
+    )
+    _srv.launch_server(**kwargs)
 
 
 def start_browser() -> subprocess.Popen:
-    cmd = build_launch_command()
-    logger.info("Starting browser: %s", " ".join(cmd))
+    """Fork a child process that calls run_browser().
+
+    We still need a subprocess so the watchdog can monitor / restart it.
+    """
+    cmd = [sys.executable, "-c",
+           "from server import run_browser; run_browser()"]
+    logger.info("Starting browser subprocess")
     proc = subprocess.Popen(
         cmd,
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
+        cwd="/app",
     )
     return proc
 
@@ -134,7 +166,7 @@ def watchdog():
         with lock:
             browser_process = proc
 
-        time.sleep(2)
+        time.sleep(3)
         if proc.poll() is None:
             browser_running.set()
             logger.info(
