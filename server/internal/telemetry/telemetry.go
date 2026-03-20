@@ -30,6 +30,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -52,10 +53,11 @@ const (
 
 // Event represents a single telemetry event emitted after a job completes.
 type Event struct {
-	Endpoint   string // "scrape_sync", "scrape_async", "scrape_batch"
-	Handler    string // "http", "browser", ""
-	Status     string // "success", "failed"
-	DurationMs int
+	Endpoint     string // "scrape_sync", "scrape_async", "scrape_batch"
+	Handler      string // "http", "browser", ""
+	Status       string // "success", "failed"
+	DurationMs   int
+	FailedDomain string // domain (not URL) — only set on failure
 }
 
 // Collector aggregates telemetry events in memory and sends them periodically.
@@ -81,6 +83,9 @@ type Collector struct {
 	duration1to5s   atomic.Int64
 	duration5to30s  atomic.Int64
 	durationOver30s atomic.Int64
+
+	// Failed domains — sync.Map for concurrent writes, domain → *atomic.Int64
+	failedDomains sync.Map
 
 	lastSentAt atomic.Value // time.Time
 	sendCount  atomic.Int64
@@ -128,6 +133,8 @@ type payload struct {
 		GeminiEnabled bool `json:"gemini_enabled"`
 		ProxyPoolSize int  `json:"proxy_pool_size"`
 	} `json:"features"`
+
+	FailedDomains map[string]int64 `json:"failed_domains,omitempty"`
 }
 
 // StatusResponse is returned by the /v1/telemetry/status endpoint.
@@ -211,6 +218,10 @@ func (c *Collector) Record(e Event) {
 		c.statusSuccess.Add(1)
 	case "failed":
 		c.statusFailed.Add(1)
+		if e.FailedDomain != "" {
+			counter, _ := c.failedDomains.LoadOrStore(e.FailedDomain, &atomic.Int64{})
+			counter.(*atomic.Int64).Add(1)
+		}
 	}
 
 	switch {
@@ -348,6 +359,27 @@ func (c *Collector) snapshot(reset bool) *payload {
 
 	p.Features.GeminiEnabled = c.geminiEnabled
 	p.Features.ProxyPoolSize = c.proxyPoolSize
+
+	// Collect failed domains
+	fd := make(map[string]int64)
+	c.failedDomains.Range(func(key, value any) bool {
+		domain := key.(string)
+		counter := value.(*atomic.Int64)
+		if reset {
+			if v := counter.Swap(0); v > 0 {
+				fd[domain] = v
+			}
+			c.failedDomains.Delete(key)
+		} else {
+			if v := counter.Load(); v > 0 {
+				fd[domain] = v
+			}
+		}
+		return true
+	})
+	if len(fd) > 0 {
+		p.FailedDomains = fd
+	}
 
 	return p
 }

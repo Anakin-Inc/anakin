@@ -419,6 +419,87 @@ func TestPayload_JSONStructure(t *testing.T) {
 	}
 }
 
+func TestRecord_FailedDomains(t *testing.T) {
+	c := &Collector{enabled: true, startedAt: time.Now()}
+
+	c.Record(Event{Endpoint: "scrape_sync", Status: "failed", DurationMs: 5000, FailedDomain: "linkedin.com"})
+	c.Record(Event{Endpoint: "scrape_sync", Status: "failed", DurationMs: 3000, FailedDomain: "linkedin.com"})
+	c.Record(Event{Endpoint: "scrape_async", Status: "failed", DurationMs: 2000, FailedDomain: "glassdoor.com"})
+	c.Record(Event{Endpoint: "scrape_sync", Status: "success", DurationMs: 500}) // success — no FailedDomain
+
+	p := c.snapshot(false)
+	if p.FailedDomains == nil {
+		t.Fatal("expected FailedDomains to be set")
+	}
+	if p.FailedDomains["linkedin.com"] != 2 {
+		t.Errorf("expected linkedin.com=2, got %d", p.FailedDomains["linkedin.com"])
+	}
+	if p.FailedDomains["glassdoor.com"] != 1 {
+		t.Errorf("expected glassdoor.com=1, got %d", p.FailedDomains["glassdoor.com"])
+	}
+}
+
+func TestRecord_FailedDomains_ResetOnSnapshot(t *testing.T) {
+	c := &Collector{enabled: true, startedAt: time.Now()}
+
+	c.Record(Event{Endpoint: "scrape_sync", Status: "failed", DurationMs: 1000, FailedDomain: "example.com"})
+
+	p := c.snapshot(true) // reset
+	if p.FailedDomains["example.com"] != 1 {
+		t.Errorf("expected example.com=1 in snapshot, got %d", p.FailedDomains["example.com"])
+	}
+
+	// After reset, should be empty
+	p2 := c.snapshot(false)
+	if len(p2.FailedDomains) != 0 {
+		t.Errorf("expected empty FailedDomains after reset, got %v", p2.FailedDomains)
+	}
+}
+
+func TestRecord_FailedDomains_NotSetOnSuccess(t *testing.T) {
+	c := &Collector{enabled: true, startedAt: time.Now()}
+
+	c.Record(Event{Endpoint: "scrape_sync", Status: "success", DurationMs: 100})
+
+	p := c.snapshot(false)
+	if len(p.FailedDomains) != 0 {
+		t.Errorf("expected no FailedDomains for success-only events, got %v", p.FailedDomains)
+	}
+}
+
+func TestRecord_FailedDomains_OmittedFromJSON(t *testing.T) {
+	c := &Collector{enabled: true, instanceID: "test", startedAt: time.Now()}
+	c.Record(Event{Endpoint: "scrape_sync", Status: "success", DurationMs: 100})
+
+	p := c.snapshot(false)
+	data, _ := json.Marshal(p)
+	var raw map[string]interface{}
+	json.Unmarshal(data, &raw)
+
+	if _, exists := raw["failed_domains"]; exists {
+		t.Error("expected failed_domains to be omitted from JSON when empty")
+	}
+}
+
+func TestRecord_FailedDomains_InJSON(t *testing.T) {
+	c := &Collector{enabled: true, instanceID: "test", startedAt: time.Now()}
+	c.Record(Event{Endpoint: "scrape_sync", Status: "failed", DurationMs: 1000, FailedDomain: "blocked-site.com"})
+
+	p := c.snapshot(false)
+	data, _ := json.Marshal(p)
+	var raw map[string]interface{}
+	json.Unmarshal(data, &raw)
+
+	fd, exists := raw["failed_domains"]
+	if !exists {
+		t.Fatal("expected failed_domains in JSON")
+	}
+	domains := fd.(map[string]interface{})
+	if domains["blocked-site.com"] != float64(1) {
+		t.Errorf("expected blocked-site.com=1, got %v", domains["blocked-site.com"])
+	}
+}
+
 func TestTelemetryDisabledNoOutbound(t *testing.T) {
 	var called atomic.Bool
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

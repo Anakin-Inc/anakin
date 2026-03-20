@@ -40,10 +40,11 @@ Every hour, the server sends a single HTTP POST to `https://telemetry.anakin.io/
 | `duration.over_30s` | `0` | Jobs completing in >30 seconds |
 | `features.gemini_enabled` | `true` | Whether Gemini API key is configured |
 | `features.proxy_pool_size` | `3` | Number of proxies in the pool |
+| `failed_domains` | `{"linkedin.com": 8}` | Domains (not URLs) where scraping failed, with failure count. Only present when failures occurred. |
 
 ## What is NOT collected
 
-- URLs you scrape
+- URLs you scrape (only the domain name is sent for *failed* scrapes — never the full URL or path)
 - Page content (HTML, markdown, JSON)
 - IP addresses (not stored on the receiver)
 - Domain configurations

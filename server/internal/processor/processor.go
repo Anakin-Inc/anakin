@@ -293,9 +293,10 @@ func (p *Processor) handleFailure(ctx context.Context, msg models.JobMessage, st
 	}
 
 	p.telemetry.Record(telemetry.Event{
-		Endpoint:   telemetryEndpoint(msg),
-		Status:     "failed",
-		DurationMs: duration,
+		Endpoint:     telemetryEndpoint(msg),
+		Status:       "failed",
+		DurationMs:   duration,
+		FailedDomain: domain.ExtractHost(msg.URL),
 	})
 
 	return jobErr
