@@ -61,6 +61,13 @@ CREATE TABLE IF NOT EXISTS proxy_scores (
     PRIMARY KEY (proxy_url, target_host)
 );
 
+-- Telemetry instance identity (persists across container restarts)
+CREATE TABLE IF NOT EXISTS telemetry_instance (
+    id SERIAL PRIMARY KEY,
+    instance_id UUID NOT NULL UNIQUE,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+);
+
 CREATE INDEX IF NOT EXISTS idx_scrape_requests_created ON scrape_requests(created_at);
 CREATE INDEX IF NOT EXISTS idx_scrape_requests_url ON scrape_requests(url);
 CREATE INDEX IF NOT EXISTS idx_proxy_scores_host ON proxy_scores(target_host);

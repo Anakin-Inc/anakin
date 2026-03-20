@@ -114,15 +114,15 @@ No API keys required for the scraper itself. Just JSON in, results out.
                     │   (Go/Fiber)    │────────▶│  2.5     │
                     │   API + Workers │ optional│  Flash   │
                     │   Port 8080     │         └──────────┘
-                    └────┬───────┬───┘
-                         │       │
-              ┌──────────┘       └──────────┐
-              ▼                             ▼
-        ┌──────────┐               ┌──────────────┐
-        │PostgreSQL │               │   Browser    │
-        │  jobs +   │               │   Service    │
-        │  configs  │               │  (Camoufox)  │
-        └──────────┘               └──────────────┘
+                    └──┬─────┬────┬──┘
+                       │     │    │
+            ┌──────────┘     │    └────────────┐
+            ▼                ▼                  ▼ (hourly, anonymous)
+      ┌──────────┐  ┌──────────────┐  ┌──────────────────┐
+      │PostgreSQL │  │   Browser    │  │ telemetry.       │
+      │  jobs +   │  │   Service    │  │ anakin.io        │
+      │  configs  │  │  (Camoufox)  │  │ (opt-out: off)   │
+      └──────────┘  └──────────────┘  └──────────────────┘
 ```
 
 The server is a single Go binary. API handlers accept requests, insert jobs into PostgreSQL, and push them to an in-process worker pool via Go channels. Workers execute the handler chain (HTTP fetch → browser fallback), convert HTML to markdown, optionally extract structured JSON via Gemini, and write results back to the database. No external queues or object storage.
@@ -141,6 +141,7 @@ See [docs/API.md](docs/API.md) for the complete API reference. Quick overview:
 | `POST` | `/v1/domain-configs` | Create a per-domain scraping config |
 | `GET` | `/v1/domain-configs` | List all domain configs |
 | `GET` | `/v1/proxy/scores` | View proxy Thompson Sampling scores |
+| `GET` | `/v1/telemetry/status` | View telemetry state and next payload ([details](TELEMETRY.md)) |
 | `GET` | `/health` | Health check |
 
 ### Request Fields
@@ -216,6 +217,8 @@ All configuration via environment variables:
 | `PROXY_URLS` | — | Comma-separated proxy pool for auto-selection (Thompson Sampling) |
 | `GEMINI_API_KEY` | — | Google Gemini API key for structured JSON extraction ([get one free](https://aistudio.google.com/apikey)) |
 | `LOG_LEVEL` | `INFO` | Log level (DEBUG, INFO, WARN, ERROR) |
+| `TELEMETRY` | `on` | Anonymous usage telemetry (`off` to disable — see [TELEMETRY.md](TELEMETRY.md)) |
+| `TELEMETRY_URL` | — | Custom telemetry endpoint (defaults to `https://telemetry.anakin.io/v1/collect`) |
 | `DISABLE_HOSTED_HINTS` | — | Set to `true` to suppress hosted service tips in error messages |
 
 ## Project Structure
@@ -233,6 +236,7 @@ anakinscraper-oss/
 │       ├── gemini/             # Gemini AI JSON extraction
 │       ├── domain/             # Domain configs + failure detection
 │       ├── proxy/              # Proxy pool + Thompson Sampling
+│       ├── telemetry/          # Anonymous usage telemetry
 │       ├── processor/          # Job processing
 │       └── http/
 │           ├── handlers/       # API request handlers

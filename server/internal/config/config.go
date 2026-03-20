@@ -35,6 +35,10 @@ type Config struct {
 	// Gemini (optional — enables generateJson)
 	GeminiAPIKey string
 
+	// Telemetry (anonymous usage data — opt-out via TELEMETRY=off)
+	TelemetryEnabled bool
+	TelemetryURL     string
+
 	// Logging
 	LogLevel string
 }
@@ -53,8 +57,10 @@ func Load() (*Config, error) {
 		JobBufferSize:   getIntEnv("JOB_BUFFER_SIZE", 100),
 		ProxyURL:        os.Getenv("PROXY_URL"),
 		ProxyURLs:       getStringSliceEnv("PROXY_URLS"),
-		GeminiAPIKey:    os.Getenv("GEMINI_API_KEY"),
-		LogLevel:        getEnvOrDefault("LOG_LEVEL", "INFO"),
+		GeminiAPIKey:     os.Getenv("GEMINI_API_KEY"),
+		TelemetryEnabled: getBoolEnvDefault("TELEMETRY", true),
+		TelemetryURL:     os.Getenv("TELEMETRY_URL"),
+		LogLevel:         getEnvOrDefault("LOG_LEVEL", "INFO"),
 	}
 
 	if cfg.DatabaseURL == "" {
@@ -93,6 +99,19 @@ func getStringSliceEnv(key string) []string {
 		}
 	}
 	return result
+}
+
+func getBoolEnvDefault(key string, defaultValue bool) bool {
+	v := os.Getenv(key)
+	if v == "" {
+		return defaultValue
+	}
+	switch strings.ToLower(v) {
+	case "false", "off", "0", "no":
+		return false
+	default:
+		return true
+	}
 }
 
 func getDurationEnv(key string, defaultValue time.Duration) time.Duration {

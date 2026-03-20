@@ -13,7 +13,7 @@ func clearConfigEnvVars(t *testing.T) {
 		"PORT", "DATABASE_URL", "BROWSER_WS_URL", "BROWSER_TIMEOUT",
 		"BROWSER_LOAD_WAIT", "JOB_TIMEOUT", "MAX_JOB_RETRIES",
 		"WORKER_POOL_SIZE", "JOB_BUFFER_SIZE", "PROXY_URL", "PROXY_URLS",
-		"GEMINI_API_KEY", "LOG_LEVEL",
+		"GEMINI_API_KEY", "TELEMETRY", "TELEMETRY_URL", "LOG_LEVEL",
 	}
 	for _, v := range vars {
 		t.Setenv(v, "")
@@ -95,6 +95,12 @@ func TestLoad(t *testing.T) {
 		}
 		if cfg.GeminiAPIKey != "" {
 			t.Errorf("expected empty GeminiAPIKey by default, got: %q", cfg.GeminiAPIKey)
+		}
+		if !cfg.TelemetryEnabled {
+			t.Error("expected TelemetryEnabled=true by default")
+		}
+		if cfg.TelemetryURL != "" {
+			t.Errorf("expected empty TelemetryURL by default, got: %q", cfg.TelemetryURL)
 		}
 	})
 
@@ -225,6 +231,48 @@ func TestLoad(t *testing.T) {
 		}
 		if cfg.ProxyURLs[1] != "http://b:8080" {
 			t.Errorf("expected second ProxyURL 'http://b:8080', got: %q", cfg.ProxyURLs[1])
+		}
+	})
+
+	t.Run("TELEMETRY=off disables telemetry", func(t *testing.T) {
+		clearConfigEnvVars(t)
+		t.Setenv("DATABASE_URL", "postgres://localhost/test")
+		t.Setenv("TELEMETRY", "off")
+
+		cfg, err := Load()
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if cfg.TelemetryEnabled {
+			t.Error("expected TelemetryEnabled=false when TELEMETRY=off")
+		}
+	})
+
+	t.Run("TELEMETRY=false disables telemetry", func(t *testing.T) {
+		clearConfigEnvVars(t)
+		t.Setenv("DATABASE_URL", "postgres://localhost/test")
+		t.Setenv("TELEMETRY", "false")
+
+		cfg, err := Load()
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if cfg.TelemetryEnabled {
+			t.Error("expected TelemetryEnabled=false when TELEMETRY=false")
+		}
+	})
+
+	t.Run("custom TELEMETRY_URL", func(t *testing.T) {
+		clearConfigEnvVars(t)
+		t.Setenv("DATABASE_URL", "postgres://localhost/test")
+		t.Setenv("TELEMETRY_URL", "https://custom.example.com/telemetry")
+
+		cfg, err := Load()
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if cfg.TelemetryURL != "https://custom.example.com/telemetry" {
+			t.Errorf("expected custom TelemetryURL, got: %q", cfg.TelemetryURL)
 		}
 	})
 }
