@@ -330,11 +330,8 @@ This repo gives you the full scraping engine. [anakin.io](https://anakin.io) add
 | Domain configs | Yes | Yes |
 | Proxy auto-selection | Yes (bring your own proxies) | Yes (195 countries included) |
 | Geo-targeted proxies | — | 195 countries |
-| Response caching | — | Built-in |
-| Rate limiting | — | Built-in |
 | AI web search | — | Yes |
 | Deep agentic research | — | Yes |
-| Auto-scaling | — | Yes |
 | Zero infrastructure | — | Yes |
 
 **Already self-hosting?** Switch to hosted with one line — same API, same CLI:
