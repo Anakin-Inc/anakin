@@ -9,11 +9,12 @@ import (
 
 	"github.com/Anakin-Inc/anakinscraper-oss/server/internal/http/handlers"
 	"github.com/Anakin-Inc/anakinscraper-oss/server/internal/proxy"
+	"github.com/Anakin-Inc/anakinscraper-oss/server/internal/telemetry"
 	"github.com/Anakin-Inc/anakinscraper-oss/server/internal/worker"
 )
 
 // Setup configures all routes.
-func Setup(app *fiber.App, db *sql.DB, pool *worker.Pool, proxyPool *proxy.Pool) {
+func Setup(app *fiber.App, db *sql.DB, pool *worker.Pool, proxyPool *proxy.Pool, tel *telemetry.Collector) {
 	healthHandler := handlers.NewHealthHandler(db)
 	scraperHandler := handlers.NewScraperHandler(db, pool)
 	domainConfigHandler := handlers.NewDomainConfigHandler(db)
@@ -36,4 +37,8 @@ func Setup(app *fiber.App, db *sql.DB, pool *worker.Pool, proxyPool *proxy.Pool)
 	v1.Delete("/domain-configs/:domain", domainConfigHandler.Delete)
 
 	v1.Get("/proxy/scores", proxyScoresHandler.GetScores)
+
+	v1.Get("/telemetry/status", func(c *fiber.Ctx) error {
+		return c.JSON(tel.Status())
+	})
 }

@@ -104,6 +104,7 @@ func (h *ScraperHandler) ScrapeSync(c *fiber.Ctx) error {
 		ForceFresh:   req.ForceFresh,
 		UseBrowser:   req.UseBrowser,
 		GenerateJson: req.GenerateJson,
+		SyncRequest:  true,
 	})
 
 	slog.Info("sync scrape started", "jobId", jobID, "url", req.URL)

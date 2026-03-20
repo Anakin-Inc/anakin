@@ -18,6 +18,7 @@ import (
 	"github.com/Anakin-Inc/anakinscraper-oss/server/internal/handler"
 	"github.com/Anakin-Inc/anakinscraper-oss/server/internal/models"
 	"github.com/Anakin-Inc/anakinscraper-oss/server/internal/proxy"
+	"github.com/Anakin-Inc/anakinscraper-oss/server/internal/telemetry"
 )
 
 // Processor handles individual scraping jobs.
@@ -28,11 +29,12 @@ type Processor struct {
 	proxyPool    *proxy.Pool
 	detector     *domain.Detector
 	geminiClient *gemini.Client
+	telemetry    *telemetry.Collector
 }
 
 // NewProcessor creates a new job processor.
-// domainCache, proxyPool, and geminiClient are optional (can be nil).
-func NewProcessor(db *sql.DB, chain *handler.Chain, domainCache *domain.Cache, proxyPool *proxy.Pool, geminiClient *gemini.Client) *Processor {
+// domainCache, proxyPool, geminiClient, and tel are optional (can be nil).
+func NewProcessor(db *sql.DB, chain *handler.Chain, domainCache *domain.Cache, proxyPool *proxy.Pool, geminiClient *gemini.Client, tel *telemetry.Collector) *Processor {
 	var det *domain.Detector
 	if domainCache != nil {
 		det = domain.NewDetector()
@@ -44,6 +46,7 @@ func NewProcessor(db *sql.DB, chain *handler.Chain, domainCache *domain.Cache, p
 		proxyPool:    proxyPool,
 		detector:     det,
 		geminiClient: geminiClient,
+		telemetry:    tel,
 	}
 }
 
@@ -240,6 +243,14 @@ func (p *Processor) processScrapeJob(ctx context.Context, msg models.JobMessage,
 		"duration_ms", duration,
 		"html_length", len(result.HTML),
 	)
+
+	p.telemetry.Record(telemetry.Event{
+		Endpoint:   telemetryEndpoint(msg),
+		Handler:    result.Handler,
+		Status:     "success",
+		DurationMs: duration,
+	})
+
 	return nil
 }
 
@@ -280,6 +291,13 @@ func (p *Processor) handleFailure(ctx context.Context, msg models.JobMessage, st
 	if parentErr := p.updateParentBatchStatus(ctx, msg.ParentJobID); parentErr != nil {
 		slog.Warn("failed to update parent batch status", "parent_job_id", msg.ParentJobID, "error", parentErr)
 	}
+
+	p.telemetry.Record(telemetry.Event{
+		Endpoint:   telemetryEndpoint(msg),
+		Status:     "failed",
+		DurationMs: duration,
+	})
+
 	return jobErr
 }
 
@@ -364,6 +382,17 @@ func (p *Processor) updateParentBatchStatus(ctx context.Context, parentJobID str
 		status, parentJobID,
 	)
 	return err
+}
+
+// telemetryEndpoint maps a job message to a telemetry endpoint name.
+func telemetryEndpoint(msg models.JobMessage) string {
+	if msg.ParentJobID != "" || msg.JobType == models.JobTypeBatchURLScraper {
+		return "scrape_batch"
+	}
+	if msg.SyncRequest {
+		return "scrape_sync"
+	}
+	return "scrape_async"
 }
 
 // hostedHint returns an anakin.io upsell hint based on the error message.

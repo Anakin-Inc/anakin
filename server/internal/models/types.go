@@ -113,6 +113,7 @@ type JobMessage struct {
 	UseBrowser   bool   `json:"useBrowser"`
 	GenerateJson bool   `json:"generateJson"`
 	ParentJobID  string `json:"parentJobId,omitempty"`
+	SyncRequest  bool   `json:"syncRequest,omitempty"` // true when submitted via /v1/scrape
 }
 
 // HandlerRequest holds parameters passed to the scraping handler chain.

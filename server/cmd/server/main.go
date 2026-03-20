@@ -26,6 +26,7 @@ import (
 	"github.com/Anakin-Inc/anakinscraper-oss/server/internal/http/router"
 	"github.com/Anakin-Inc/anakinscraper-oss/server/internal/processor"
 	"github.com/Anakin-Inc/anakinscraper-oss/server/internal/proxy"
+	"github.com/Anakin-Inc/anakinscraper-oss/server/internal/telemetry"
 	"github.com/Anakin-Inc/anakinscraper-oss/server/internal/worker"
 )
 
@@ -86,8 +87,12 @@ func main() {
 	// Gemini client (optional — enables generateJson)
 	geminiClient := gemini.NewClient(cfg.GeminiAPIKey)
 
+	// Telemetry (anonymous usage data)
+	tel := telemetry.New(db, cfg.TelemetryEnabled, cfg.TelemetryURL,
+		cfg.GeminiAPIKey != "", len(cfg.ProxyURLs))
+
 	// Create processor and worker pool
-	proc := processor.NewProcessor(db, chain, domainCache, proxyPool, geminiClient)
+	proc := processor.NewProcessor(db, chain, domainCache, proxyPool, geminiClient, tel)
 	pool := worker.NewPool(proc, cfg.WorkerPoolSize, cfg.JobBufferSize, cfg.JobTimeout)
 	pool.Start(bgCtx)
 
@@ -113,7 +118,7 @@ func main() {
 	}))
 
 	// Setup routes
-	router.Setup(app, db, pool, proxyPool)
+	router.Setup(app, db, pool, proxyPool, tel)
 
 	// Startup banner
 	fmt.Println("")
@@ -121,6 +126,9 @@ func main() {
 	fmt.Printf("  API:     http://localhost:%s\n", cfg.Port)
 	fmt.Println("  Docs:    https://github.com/Anakin-Inc/anakinscraper-oss")
 	fmt.Println("  Hosted:  https://anakin.io (geo-proxies, caching, search, research)")
+	if cfg.TelemetryEnabled {
+		fmt.Println("  Telemetry: anonymous usage data enabled (disable: TELEMETRY=off)")
+	}
 	fmt.Println("")
 
 	// Start server
@@ -153,6 +161,7 @@ func main() {
 	pool.Drain()
 
 	// Cleanup
+	tel.Stop()
 	domainCache.Stop()
 	if proxyPool != nil {
 		proxyPool.Stop()
