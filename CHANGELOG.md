@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.1.1 (2026-03-20)
+
+### Added
+- **Anonymous telemetry** — event-level usage telemetry with hourly batch reporting (opt-out: `TELEMETRY=off`). See [TELEMETRY.md](TELEMETRY.md)
+- **Transparency endpoint** — `GET /v1/telemetry/status` shows exactly what telemetry data will be sent
+- **Startup banner notice** — telemetry status displayed on server boot
+- **Privacy documentation** — `TELEMETRY.md` details what is and isn't collected
+
 ## v0.1.0 (2026-03-18)
 
 Initial open-source release.
