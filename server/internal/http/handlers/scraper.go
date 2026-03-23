@@ -3,7 +3,6 @@
 package handlers
 
 import (
-	"database/sql"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -14,16 +13,17 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/Anakin-Inc/anakinscraper-oss/server/internal/models"
+	"github.com/Anakin-Inc/anakinscraper-oss/server/internal/store"
 	"github.com/Anakin-Inc/anakinscraper-oss/server/internal/worker"
 )
 
 type ScraperHandler struct {
-	db   *sql.DB
-	pool *worker.Pool
+	store store.JobStore
+	pool  *worker.Pool
 }
 
-func NewScraperHandler(db *sql.DB, pool *worker.Pool) *ScraperHandler {
-	return &ScraperHandler{db: db, pool: pool}
+func NewScraperHandler(s store.JobStore, pool *worker.Pool) *ScraperHandler {
+	return &ScraperHandler{store: s, pool: pool}
 }
 
 func (h *ScraperHandler) CreateJob(c *fiber.Ctx) error {
@@ -42,7 +42,10 @@ func (h *ScraperHandler) CreateJob(c *fiber.Ctx) error {
 	jobID := uuid.New().String()
 
 	payload, _ := json.Marshal(req)
-	if err := createJobInDB(h.db, jobID, models.JobTypeURLScraper, req.URL, req.Country, payload, req.ForceFresh, nil); err != nil {
+	if err := h.store.CreateJob(c.Context(), store.JobRecord{
+		ID: jobID, JobType: models.JobTypeURLScraper, URL: req.URL,
+		Country: req.Country, Payload: string(payload), ForceFresh: req.ForceFresh,
+	}); err != nil {
 		slog.Error("failed to insert job", "error", err, "jobId", jobID)
 		return c.Status(fiber.StatusInternalServerError).JSON(models.ErrorResponse{
 			Error: "internal_error", Message: "Failed to create job",
@@ -89,7 +92,10 @@ func (h *ScraperHandler) ScrapeSync(c *fiber.Ctx) error {
 	now := time.Now().UTC()
 
 	payload, _ := json.Marshal(req)
-	if err := createJobInDB(h.db, jobID, models.JobTypeURLScraper, req.URL, req.Country, payload, req.ForceFresh, nil); err != nil {
+	if err := h.store.CreateJob(c.Context(), store.JobRecord{
+		ID: jobID, JobType: models.JobTypeURLScraper, URL: req.URL,
+		Country: req.Country, Payload: string(payload), ForceFresh: req.ForceFresh,
+	}); err != nil {
 		slog.Error("failed to insert job", "error", err, "jobId", jobID)
 		return c.Status(fiber.StatusInternalServerError).JSON(models.ErrorResponse{
 			Error: "internal_error", Message: "Failed to create job",
@@ -109,7 +115,7 @@ func (h *ScraperHandler) ScrapeSync(c *fiber.Ctx) error {
 
 	slog.Info("sync scrape started", "jobId", jobID, "url", req.URL)
 
-	// Poll DB until job completes or 30s timeout
+	// Poll store until job completes or 30s timeout
 	const (
 		pollInterval = 500 * time.Millisecond
 		maxWait      = 30 * time.Second
@@ -121,39 +127,30 @@ func (h *ScraperHandler) ScrapeSync(c *fiber.Ctx) error {
 	for {
 		select {
 		case <-ticker.C:
-			var status string
-			var resultJSON sql.NullString
-			var errorMsg sql.NullString
-			var completedAt sql.NullTime
-			var durationMs sql.NullInt64
-
-			err := h.db.QueryRowContext(c.Context(),
-				`SELECT status, result, error, completed_at, duration_ms FROM scrape_requests WHERE id = $1`,
-				jobID,
-			).Scan(&status, &resultJSON, &errorMsg, &completedAt, &durationMs)
+			j, err := h.store.GetJob(c.Context(), jobID)
 			if err != nil {
 				continue
 			}
 
-			if status == models.JobStatusCompleted || status == models.JobStatusFailed {
+			if j.Status == models.JobStatusCompleted || j.Status == models.JobStatusFailed {
 				resp := models.JobResponse{
-					ID: jobID, Status: status, URL: req.URL, JobType: models.JobTypeURLScraper,
+					ID: jobID, Status: j.Status, URL: req.URL, JobType: models.JobTypeURLScraper,
 					CreatedAt: now.Format(time.RFC3339),
 				}
-				if completedAt.Valid {
-					t := completedAt.Time.Format(time.RFC3339)
+				if j.CompletedAt != nil {
+					t := j.CompletedAt.Format(time.RFC3339)
 					resp.CompletedAt = &t
 				}
-				if errorMsg.Valid {
-					resp.Error = &errorMsg.String
+				if j.Error != "" {
+					resp.Error = &j.Error
 				}
-				if durationMs.Valid {
-					d := int(durationMs.Int64)
+				if j.DurationMs > 0 {
+					d := j.DurationMs
 					resp.DurationMs = &d
 				}
-				if status == models.JobStatusCompleted && resultJSON.Valid && resultJSON.String != "" {
+				if j.Status == models.JobStatusCompleted && j.Result != "" {
 					var result scrapeResultJSON
-					if err := json.Unmarshal([]byte(resultJSON.String), &result); err == nil {
+					if err := json.Unmarshal([]byte(j.Result), &result); err == nil {
 						resp.HTML = result.HTML
 						resp.CleanedHTML = result.CleanedHTML
 						resp.Markdown = result.Markdown
@@ -185,52 +182,32 @@ func (h *ScraperHandler) GetJob(c *fiber.Ctx) error {
 		})
 	}
 
-	var (
-		id, jobURL, jobType, status string
-		createdAt                   time.Time
-		completedAt                 sql.NullTime
-		errorMsg                    sql.NullString
-		resultJSON                  sql.NullString
-		durationMs                  sql.NullInt64
-	)
-
-	err := h.db.QueryRowContext(c.Context(),
-		`SELECT id, url, job_type, status, created_at, completed_at, error, result, duration_ms
-		 FROM scrape_requests WHERE id = $1`,
-		jobID,
-	).Scan(&id, &jobURL, &jobType, &status, &createdAt, &completedAt, &errorMsg, &resultJSON, &durationMs)
-
-	if err == sql.ErrNoRows {
+	j, err := h.store.GetJob(c.Context(), jobID)
+	if err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(models.ErrorResponse{
 			Error: "not_found", Message: "Job not found",
 		})
 	}
-	if err != nil {
-		slog.Error("failed to fetch job", "error", err, "jobId", jobID)
-		return c.Status(fiber.StatusInternalServerError).JSON(models.ErrorResponse{
-			Error: "internal_error", Message: "Failed to fetch job",
-		})
-	}
 
 	resp := models.JobResponse{
-		ID: id, Status: status, URL: jobURL, JobType: jobType,
-		CreatedAt: createdAt.Format(time.RFC3339),
+		ID: j.ID, Status: j.Status, URL: j.URL, JobType: j.JobType,
+		CreatedAt: j.CreatedAt.Format(time.RFC3339),
 	}
-	if completedAt.Valid {
-		t := completedAt.Time.Format(time.RFC3339)
+	if j.CompletedAt != nil {
+		t := j.CompletedAt.Format(time.RFC3339)
 		resp.CompletedAt = &t
 	}
-	if errorMsg.Valid {
-		resp.Error = &errorMsg.String
+	if j.Error != "" {
+		resp.Error = &j.Error
 	}
-	if durationMs.Valid {
-		d := int(durationMs.Int64)
+	if j.DurationMs > 0 {
+		d := j.DurationMs
 		resp.DurationMs = &d
 	}
 
-	if status == models.JobStatusCompleted && resultJSON.Valid && resultJSON.String != "" {
+	if j.Status == models.JobStatusCompleted && j.Result != "" {
 		var result scrapeResultJSON
-		if err := json.Unmarshal([]byte(resultJSON.String), &result); err == nil {
+		if err := json.Unmarshal([]byte(j.Result), &result); err == nil {
 			resp.HTML = result.HTML
 			resp.CleanedHTML = result.CleanedHTML
 			resp.Markdown = result.Markdown
@@ -270,7 +247,10 @@ func (h *ScraperHandler) CreateBatchJob(c *fiber.Ctx) error {
 	parentJobID := uuid.New().String()
 	payload, _ := json.Marshal(req)
 
-	if err := createJobInDB(h.db, parentJobID, models.JobTypeBatchURLScraper, req.URLs[0], req.Country, payload, false, nil); err != nil {
+	if err := h.store.CreateJob(c.Context(), store.JobRecord{
+		ID: parentJobID, JobType: models.JobTypeBatchURLScraper, URL: req.URLs[0],
+		Country: req.Country, Payload: string(payload),
+	}); err != nil {
 		slog.Error("failed to insert parent batch job", "error", err, "jobId", parentJobID)
 		return c.Status(fiber.StatusInternalServerError).JSON(models.ErrorResponse{
 			Error: "internal_error", Message: "Failed to create batch job",
@@ -279,7 +259,10 @@ func (h *ScraperHandler) CreateBatchJob(c *fiber.Ctx) error {
 
 	for _, u := range req.URLs {
 		childID := uuid.New().String()
-		if err := createJobInDB(h.db, childID, models.JobTypeURLScraper, u, req.Country, []byte("{}"), false, &parentJobID); err != nil {
+		if err := h.store.CreateJob(c.Context(), store.JobRecord{
+			ID: childID, JobType: models.JobTypeURLScraper, URL: u,
+			Country: req.Country, Payload: "{}", ParentJobID: parentJobID,
+		}); err != nil {
 			slog.Error("failed to insert child job", "error", err, "childId", childID)
 			continue
 		}
@@ -311,65 +294,37 @@ func (h *ScraperHandler) GetBatchJob(c *fiber.Ctx) error {
 		})
 	}
 
-	var (
-		id, status  string
-		createdAt   time.Time
-		completedAt sql.NullTime
-		durationMs  sql.NullInt64
-	)
-	err := h.db.QueryRowContext(c.Context(),
-		`SELECT id, status, created_at, completed_at, duration_ms
-		 FROM scrape_requests WHERE id = $1 AND job_type = $2`,
-		jobID, models.JobTypeBatchURLScraper,
-	).Scan(&id, &status, &createdAt, &completedAt, &durationMs)
-	if err == sql.ErrNoRows {
+	parent, err := h.store.GetJob(c.Context(), jobID)
+	if err != nil || parent.JobType != models.JobTypeBatchURLScraper {
 		return c.Status(fiber.StatusNotFound).JSON(models.ErrorResponse{
 			Error: "not_found", Message: "Batch job not found",
 		})
 	}
-	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(models.ErrorResponse{
-			Error: "internal_error", Message: "Failed to fetch batch job",
-		})
-	}
 
-	rows, err := h.db.QueryContext(c.Context(),
-		`SELECT id, url, status, error, result, duration_ms
-		 FROM scrape_requests WHERE parent_job_id = $1 ORDER BY created_at ASC`, jobID)
+	children, err := h.store.GetChildJobs(c.Context(), jobID)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(models.ErrorResponse{
 			Error: "internal_error", Message: "Failed to fetch batch job results",
 		})
 	}
-	defer rows.Close()
 
-	results := make([]models.BatchResult, 0)
-	urls := make([]string, 0)
-	idx := 0
+	results := make([]models.BatchResult, 0, len(children))
+	urls := make([]string, 0, len(children))
 	hasPending, hasProcessing := false, false
 
-	for rows.Next() {
-		var (
-			childID, childURL, childStatus string
-			errorMsg, resultJSON           sql.NullString
-			childDuration                  sql.NullInt64
-		)
-		if err := rows.Scan(&childID, &childURL, &childStatus, &errorMsg, &resultJSON, &childDuration); err != nil {
-			continue
-		}
-		urls = append(urls, childURL)
-		item := models.BatchResult{Index: idx, URL: childURL, Status: childStatus}
-		idx++
-		if childDuration.Valid {
-			d := int(childDuration.Int64)
+	for idx, child := range children {
+		urls = append(urls, child.URL)
+		item := models.BatchResult{Index: idx, URL: child.URL, Status: child.Status}
+		if child.DurationMs > 0 {
+			d := child.DurationMs
 			item.DurationMs = &d
 		}
-		if errorMsg.Valid {
-			item.Error = &errorMsg.String
+		if child.Error != "" {
+			item.Error = &child.Error
 		}
-		if childStatus == models.JobStatusCompleted && resultJSON.Valid && resultJSON.String != "" {
+		if child.Status == models.JobStatusCompleted && child.Result != "" {
 			var result scrapeResultJSON
-			if err := json.Unmarshal([]byte(resultJSON.String), &result); err == nil {
+			if err := json.Unmarshal([]byte(child.Result), &result); err == nil {
 				item.HTML = result.HTML
 				item.CleanedHTML = result.CleanedHTML
 				item.Markdown = result.Markdown
@@ -377,16 +332,16 @@ func (h *ScraperHandler) GetBatchJob(c *fiber.Ctx) error {
 				item.Cached = result.Cached
 			}
 		}
-		if childStatus == models.JobStatusPending {
+		if child.Status == models.JobStatusPending {
 			hasPending = true
 		}
-		if childStatus == models.JobStatusProcessing {
+		if child.Status == models.JobStatusProcessing {
 			hasProcessing = true
 		}
 		results = append(results, item)
 	}
 
-	derivedStatus := status
+	derivedStatus := parent.Status
 	if hasPending {
 		derivedStatus = models.JobStatusPending
 	} else if hasProcessing {
@@ -396,15 +351,15 @@ func (h *ScraperHandler) GetBatchJob(c *fiber.Ctx) error {
 	}
 
 	resp := models.BatchJobResponse{
-		ID: id, Status: derivedStatus, JobType: models.JobTypeBatchURLScraper,
-		URLs: urls, Results: results, CreatedAt: createdAt.Format(time.RFC3339),
+		ID: parent.ID, Status: derivedStatus, JobType: models.JobTypeBatchURLScraper,
+		URLs: urls, Results: results, CreatedAt: parent.CreatedAt.Format(time.RFC3339),
 	}
-	if completedAt.Valid {
-		t := completedAt.Time.Format(time.RFC3339)
+	if parent.CompletedAt != nil {
+		t := parent.CompletedAt.Format(time.RFC3339)
 		resp.CompletedAt = &t
 	}
-	if durationMs.Valid {
-		d := int(durationMs.Int64)
+	if parent.DurationMs > 0 {
+		d := parent.DurationMs
 		resp.DurationMs = &d
 	}
 	return c.JSON(resp)
@@ -416,13 +371,6 @@ type scrapeResultJSON struct {
 	Markdown      *string                       `json:"markdown,omitempty"`
 	GeneratedJson *models.GeneratedJsonResponse `json:"generatedJson,omitempty"`
 	Cached        *bool                         `json:"cached,omitempty"`
-}
-
-func createJobInDB(db *sql.DB, id, jobType, url, country string, payload []byte, forceFresh bool, parentJobID *string) error {
-	_, err := db.Exec(`INSERT INTO scrape_requests (id, job_type, url, status, country, payload, force_fresh, parent_job_id)
-        VALUES ($1, $2, $3, 'pending', $4, $5, $6, $7)`,
-		id, jobType, url, country, string(payload), forceFresh, parentJobID)
-	return err
 }
 
 func validateURL(rawURL string) error {

@@ -35,19 +35,16 @@ func TestLoad(t *testing.T) {
 		}
 	})
 
-	t.Run("fails when DATABASE_URL is missing", func(t *testing.T) {
+	t.Run("succeeds when DATABASE_URL is missing (in-memory mode)", func(t *testing.T) {
 		clearConfigEnvVars(t)
-		// DATABASE_URL is not set
+		// DATABASE_URL is not set — server runs with in-memory storage
 
 		cfg, err := Load()
-		if err == nil {
-			t.Fatal("expected error when DATABASE_URL is missing, got nil")
+		if err != nil {
+			t.Fatalf("expected no error, got: %v", err)
 		}
-		if cfg != nil {
-			t.Error("expected nil config on error")
-		}
-		if err.Error() != "DATABASE_URL is required" {
-			t.Errorf("unexpected error message: %q", err.Error())
+		if cfg.DatabaseURL != "" {
+			t.Errorf("expected empty DatabaseURL, got: %q", cfg.DatabaseURL)
 		}
 	})
 

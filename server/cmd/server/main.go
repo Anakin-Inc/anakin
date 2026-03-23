@@ -26,6 +26,7 @@ import (
 	"github.com/Anakin-Inc/anakinscraper-oss/server/internal/http/router"
 	"github.com/Anakin-Inc/anakinscraper-oss/server/internal/processor"
 	"github.com/Anakin-Inc/anakinscraper-oss/server/internal/proxy"
+	"github.com/Anakin-Inc/anakinscraper-oss/server/internal/store"
 	"github.com/Anakin-Inc/anakinscraper-oss/server/internal/telemetry"
 	"github.com/Anakin-Inc/anakinscraper-oss/server/internal/worker"
 )
@@ -41,26 +42,37 @@ func main() {
 
 	setLogLevel(cfg.LogLevel)
 
-	// Connect to PostgreSQL
-	db, err := sql.Open("postgres", cfg.DatabaseURL)
-	if err != nil {
-		slog.Error("failed to open database connection", "error", err)
-		os.Exit(1)
+	// Storage: PostgreSQL if DATABASE_URL is set, otherwise in-memory
+	var (
+		jobStore store.JobStore
+		db       *sql.DB
+	)
+
+	if cfg.DatabaseURL != "" {
+		db, err = sql.Open("postgres", cfg.DatabaseURL)
+		if err != nil {
+			slog.Error("failed to open database connection", "error", err)
+			os.Exit(1)
+		}
+		defer db.Close()
+
+		db.SetMaxOpenConns(25)
+		db.SetMaxIdleConns(5)
+		db.SetConnMaxLifetime(5 * time.Minute)
+
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+
+		if err := db.PingContext(ctx); err != nil {
+			slog.Error("failed to ping database", "error", err)
+			os.Exit(1)
+		}
+		slog.Info("connected to PostgreSQL")
+		jobStore = store.NewPostgresStore(db)
+	} else {
+		slog.Info("no DATABASE_URL — using in-memory storage (jobs won't persist across restarts)")
+		jobStore = store.NewMemoryStore()
 	}
-	defer db.Close()
-
-	db.SetMaxOpenConns(25)
-	db.SetMaxIdleConns(5)
-	db.SetConnMaxLifetime(5 * time.Minute)
-
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
-	if err := db.PingContext(ctx); err != nil {
-		slog.Error("failed to ping database", "error", err)
-		os.Exit(1)
-	}
-	slog.Info("connected to PostgreSQL")
 
 	// Build handler chain: HTTP -> Browser
 	httpHandler := handler.NewHTTPHandler(cfg.BrowserTimeout, cfg.ProxyURL)
@@ -71,15 +83,18 @@ func main() {
 	bgCtx, bgCancel := context.WithCancel(context.Background())
 	defer bgCancel()
 
-	// Domain config cache
-	domainRepo := domain.NewRepository(db)
-	domainCache := domain.NewCache(domainRepo)
-	domainCache.Start(bgCtx)
-	slog.Info("domain config cache started")
+	// Domain config cache (requires PostgreSQL)
+	var domainCache *domain.Cache
+	if db != nil {
+		domainRepo := domain.NewRepository(db)
+		domainCache = domain.NewCache(domainRepo)
+		domainCache.Start(bgCtx)
+		slog.Info("domain config cache started")
+	}
 
-	// Proxy pool (optional — only if PROXY_URLS is configured)
+	// Proxy pool (optional — only if PROXY_URLS is configured and DB is available)
 	var proxyPool *proxy.Pool
-	if len(cfg.ProxyURLs) > 0 {
+	if len(cfg.ProxyURLs) > 0 && db != nil {
 		proxyPool = proxy.NewPool(db, cfg.ProxyURLs)
 		proxyPool.Start(bgCtx)
 	}
@@ -92,7 +107,7 @@ func main() {
 		cfg.GeminiAPIKey != "", len(cfg.ProxyURLs))
 
 	// Create processor and worker pool
-	proc := processor.NewProcessor(db, chain, domainCache, proxyPool, geminiClient, tel)
+	proc := processor.NewProcessor(jobStore, chain, domainCache, proxyPool, geminiClient, tel)
 	pool := worker.NewPool(proc, cfg.WorkerPoolSize, cfg.JobBufferSize, cfg.JobTimeout)
 	pool.Start(bgCtx)
 
@@ -118,12 +133,15 @@ func main() {
 	}))
 
 	// Setup routes
-	router.Setup(app, db, pool, proxyPool, tel)
+	router.Setup(app, jobStore, db, pool, proxyPool, tel)
 
 	// Startup banner
 	fmt.Println("")
 	fmt.Println("━━━ AnakinScraper OSS v0.1.0 ━━━")
 	fmt.Printf("  API:     http://localhost:%s\n", cfg.Port)
+	if db == nil {
+		fmt.Println("  Storage: in-memory (set DATABASE_URL for persistence)")
+	}
 	fmt.Println("  Docs:    https://github.com/Anakin-Inc/anakinscraper-oss")
 	fmt.Println("  Hosted:  https://anakin.io (geo-proxies, caching, search, research)")
 	if cfg.TelemetryEnabled {
@@ -135,7 +153,7 @@ func main() {
 	go func() {
 		addr := fmt.Sprintf(":%s", cfg.Port)
 		slog.Info("starting server", "port", cfg.Port, "workers", cfg.WorkerPoolSize,
-			"proxy_pool", len(cfg.ProxyURLs) > 0)
+			"proxy_pool", len(cfg.ProxyURLs) > 0, "storage", storageMode(db))
 		if err := app.Listen(addr); err != nil {
 			slog.Error("server error", "error", err)
 		}
@@ -162,13 +180,22 @@ func main() {
 
 	// Cleanup
 	tel.Stop()
-	domainCache.Stop()
+	if domainCache != nil {
+		domainCache.Stop()
+	}
 	if proxyPool != nil {
 		proxyPool.Stop()
 	}
 	browserHandler.Stop()
 
 	slog.Info("server stopped")
+}
+
+func storageMode(db *sql.DB) string {
+	if db != nil {
+		return "postgresql"
+	}
+	return "memory"
 }
 
 func errorHandler(c *fiber.Ctx, err error) error {

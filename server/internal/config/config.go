@@ -3,7 +3,6 @@
 package config
 
 import (
-	"fmt"
 	"os"
 	"strconv"
 	"strings"
@@ -61,10 +60,6 @@ func Load() (*Config, error) {
 		TelemetryEnabled: getBoolEnvDefault("TELEMETRY", true),
 		TelemetryURL:     os.Getenv("TELEMETRY_URL"),
 		LogLevel:         getEnvOrDefault("LOG_LEVEL", "INFO"),
-	}
-
-	if cfg.DatabaseURL == "" {
-		return nil, fmt.Errorf("DATABASE_URL is required")
 	}
 
 	return cfg, nil

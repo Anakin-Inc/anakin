@@ -4,7 +4,6 @@ package processor
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -18,12 +17,13 @@ import (
 	"github.com/Anakin-Inc/anakinscraper-oss/server/internal/handler"
 	"github.com/Anakin-Inc/anakinscraper-oss/server/internal/models"
 	"github.com/Anakin-Inc/anakinscraper-oss/server/internal/proxy"
+	"github.com/Anakin-Inc/anakinscraper-oss/server/internal/store"
 	"github.com/Anakin-Inc/anakinscraper-oss/server/internal/telemetry"
 )
 
 // Processor handles individual scraping jobs.
 type Processor struct {
-	db           *sql.DB
+	store        store.JobStore
 	chain        *handler.Chain
 	domainCache  *domain.Cache
 	proxyPool    *proxy.Pool
@@ -34,13 +34,13 @@ type Processor struct {
 
 // NewProcessor creates a new job processor.
 // domainCache, proxyPool, geminiClient, and tel are optional (can be nil).
-func NewProcessor(db *sql.DB, chain *handler.Chain, domainCache *domain.Cache, proxyPool *proxy.Pool, geminiClient *gemini.Client, tel *telemetry.Collector) *Processor {
+func NewProcessor(s store.JobStore, chain *handler.Chain, domainCache *domain.Cache, proxyPool *proxy.Pool, geminiClient *gemini.Client, tel *telemetry.Collector) *Processor {
 	var det *domain.Detector
 	if domainCache != nil {
 		det = domain.NewDetector()
 	}
 	return &Processor{
-		db:           db,
+		store:        s,
 		chain:        chain,
 		domainCache:  domainCache,
 		proxyPool:    proxyPool,
@@ -61,7 +61,7 @@ func (p *Processor) ProcessJob(ctx context.Context, msg models.JobMessage) error
 		"use_browser", msg.UseBrowser,
 	)
 
-	if err := p.updateJobStatus(ctx, msg.JobID, models.JobStatusProcessing, nil, nil); err != nil {
+	if err := p.store.UpdateStatus(ctx, msg.JobID, models.JobStatusProcessing, nil, nil); err != nil {
 		slog.Error("failed to update job to processing", "job_id", msg.JobID, "error", err)
 	}
 
@@ -71,7 +71,7 @@ func (p *Processor) ProcessJob(ctx context.Context, msg models.JobMessage) error
 		return p.handleFailure(ctx, msg, start, err)
 	}
 
-	if parentErr := p.updateParentBatchStatus(ctx, msg.ParentJobID); parentErr != nil {
+	if parentErr := p.store.UpdateParentBatchStatus(ctx, msg.ParentJobID); parentErr != nil {
 		slog.Warn("failed to update parent batch status", "parent_job_id", msg.ParentJobID, "error", parentErr)
 	}
 
@@ -227,12 +227,16 @@ func (p *Processor) processScrapeJob(ctx context.Context, msg models.JobMessage,
 		DurationMs:    &duration,
 	}
 
-	if err := p.storeResult(ctx, msg.JobID, response); err != nil {
+	resultData, err := json.Marshal(response)
+	if err != nil {
+		return fmt.Errorf("failed to marshal result: %w", err)
+	}
+	if err := p.store.StoreResult(ctx, msg.JobID, string(resultData)); err != nil {
 		slog.Error("failed to store result", "job_id", msg.JobID, "error", err)
 		return fmt.Errorf("failed to store result: %w", err)
 	}
 
-	if err := p.updateJobCompleted(ctx, msg.JobID, duration, len(result.HTML)); err != nil {
+	if err := p.store.UpdateCompleted(ctx, msg.JobID, duration, len(result.HTML)); err != nil {
 		slog.Error("failed to update job in database", "job_id", msg.JobID, "error", err)
 		return fmt.Errorf("failed to update job: %w", err)
 	}
@@ -280,15 +284,16 @@ func (p *Processor) handleFailure(ctx context.Context, msg models.JobMessage, st
 		DurationMs:  &duration,
 	}
 
-	if err := p.storeResult(ctx, msg.JobID, response); err != nil {
+	failData, _ := json.Marshal(response)
+	if err := p.store.StoreResult(ctx, msg.JobID, string(failData)); err != nil {
 		slog.Error("failed to store failure", "job_id", msg.JobID, "error", err)
 	}
 
-	if err := p.updateJobStatus(ctx, msg.JobID, models.JobStatusFailed, &errMsg, &duration); err != nil {
+	if err := p.store.UpdateStatus(ctx, msg.JobID, models.JobStatusFailed, &errMsg, &duration); err != nil {
 		slog.Error("failed to update failed job in database", "job_id", msg.JobID, "error", err)
 	}
 
-	if parentErr := p.updateParentBatchStatus(ctx, msg.ParentJobID); parentErr != nil {
+	if parentErr := p.store.UpdateParentBatchStatus(ctx, msg.ParentJobID); parentErr != nil {
 		slog.Warn("failed to update parent batch status", "parent_job_id", msg.ParentJobID, "error", parentErr)
 	}
 
@@ -300,89 +305,6 @@ func (p *Processor) handleFailure(ctx context.Context, msg models.JobMessage, st
 	})
 
 	return jobErr
-}
-
-// storeResult serializes the result as JSON and writes it to the scrape_requests.result column.
-func (p *Processor) storeResult(ctx context.Context, jobID string, result interface{}) error {
-	data, err := json.Marshal(result)
-	if err != nil {
-		return fmt.Errorf("failed to marshal result: %w", err)
-	}
-	_, err = p.db.ExecContext(ctx, "UPDATE scrape_requests SET result = $1 WHERE id = $2", string(data), jobID)
-	return err
-}
-
-func (p *Processor) updateJobStatus(ctx context.Context, jobID, status string, errMsg *string, durationMs *int) error {
-	query := `UPDATE scrape_requests SET status = $1, error = $2, duration_ms = $3`
-	args := []interface{}{status, errMsg, durationMs}
-
-	if status == models.JobStatusCompleted || status == models.JobStatusFailed {
-		query += `, completed_at = NOW()`
-	}
-
-	query += fmt.Sprintf(` WHERE id = $%d`, len(args)+1)
-	args = append(args, jobID)
-
-	_, err := p.db.ExecContext(ctx, query, args...)
-	return err
-}
-
-func (p *Processor) updateJobCompleted(ctx context.Context, jobID string, durationMs, htmlLength int) error {
-	_, err := p.db.ExecContext(ctx,
-		`UPDATE scrape_requests
-		 SET status = $1, duration_ms = $2, html_length = $3, success = true, completed_at = NOW()
-		 WHERE id = $4`,
-		models.JobStatusCompleted, durationMs, htmlLength, jobID,
-	)
-	return err
-}
-
-func (p *Processor) updateParentBatchStatus(ctx context.Context, parentJobID string) error {
-	if parentJobID == "" {
-		return nil
-	}
-
-	var total, pending, processing int
-	err := p.db.QueryRowContext(ctx,
-		`SELECT
-			COUNT(*) AS total,
-			COUNT(*) FILTER (WHERE status = $2) AS pending,
-			COUNT(*) FILTER (WHERE status = $3) AS processing
-		 FROM scrape_requests
-		 WHERE parent_job_id = $1`,
-		parentJobID, models.JobStatusPending, models.JobStatusProcessing,
-	).Scan(&total, &pending, &processing)
-	if err != nil {
-		return err
-	}
-	if total == 0 {
-		return nil
-	}
-
-	status := models.JobStatusCompleted
-	if pending == total {
-		status = models.JobStatusPending
-	} else if pending > 0 || processing > 0 {
-		status = models.JobStatusProcessing
-	}
-
-	if status == models.JobStatusCompleted {
-		_, err = p.db.ExecContext(ctx,
-			`UPDATE scrape_requests
-			 SET status = $1,
-			     duration_ms = GREATEST(0, CAST(EXTRACT(EPOCH FROM (NOW() - created_at)) * 1000 AS INTEGER)),
-			     completed_at = NOW()
-			 WHERE id = $2`,
-			status, parentJobID,
-		)
-		return err
-	}
-
-	_, err = p.db.ExecContext(ctx,
-		`UPDATE scrape_requests SET status = $1 WHERE id = $2`,
-		status, parentJobID,
-	)
-	return err
 }
 
 // telemetryEndpoint maps a job message to a telemetry endpoint name.

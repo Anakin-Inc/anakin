@@ -3,25 +3,25 @@
 package handlers
 
 import (
-	"database/sql"
-
 	"github.com/gofiber/fiber/v2"
+
+	"github.com/Anakin-Inc/anakinscraper-oss/server/internal/store"
 )
 
 // HealthHandler handles health check requests.
 type HealthHandler struct {
-	db *sql.DB
+	store store.JobStore
 }
 
 // NewHealthHandler creates a new health handler.
-func NewHealthHandler(db *sql.DB) *HealthHandler {
-	return &HealthHandler{db: db}
+func NewHealthHandler(s store.JobStore) *HealthHandler {
+	return &HealthHandler{store: s}
 }
 
 // Health returns the service health status.
 func (h *HealthHandler) Health(c *fiber.Ctx) error {
 	dbOK := true
-	if err := h.db.PingContext(c.Context()); err != nil {
+	if err := h.store.Ping(c.Context()); err != nil {
 		dbOK = false
 	}
 
