@@ -353,4 +353,4 @@ See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ---
 
-Built by [AnakinAI](https://anakin.io). If you find this useful, give us a star!
+Built by [Anakin-Inc](https://anakin.io). If you find this useful, give us a star!
