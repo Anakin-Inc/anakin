@@ -32,7 +32,22 @@ curl -s -X POST http://localhost:8080/v1/scrape \
 - **Web dashboard** — built-in React UI for scraping, job tracking, domain config management, and proxy monitoring
 - **Self-contained** — just PostgreSQL + one Go binary + anti-detect browser. No Redis, no AWS, no message queues
 
-## Quick Start
+## Try It Now (no install)
+
+Test the API instantly with free credits on the hosted version — no Docker, no setup:
+
+```bash
+# 1. Get a free API key at https://anakin.io/dashboard
+# 2. Scrape any website:
+curl -s -X POST https://api.anakin.io/v1/scrape \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: ak-your-key-here" \
+  -d '{"url": "https://example.com"}' | jq .markdown
+```
+
+Same API, same response format. When you're ready to self-host, continue below.
+
+## Self-Host (Docker)
 
 ### Prerequisites
 
