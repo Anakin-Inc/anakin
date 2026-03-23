@@ -156,5 +156,3 @@ type JobStatusResponse struct {
 	CompletedAt   *string                `json:"completedAt,omitempty"`
 	DurationMs    *int                   `json:"durationMs,omitempty"`
 }
-
-

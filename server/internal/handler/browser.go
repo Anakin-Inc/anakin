@@ -31,7 +31,7 @@ func NewBrowserHandler(wsURL string, timeout, loadWait time.Duration) *BrowserHa
 	}
 }
 
-func (h *BrowserHandler) Name() string                                                   { return "browser" }
+func (h *BrowserHandler) Name() string                                               { return "browser" }
 func (h *BrowserHandler) CanHandle(_ context.Context, _ *models.HandlerRequest) bool { return true }
 
 func (h *BrowserHandler) IsHealthy() bool {

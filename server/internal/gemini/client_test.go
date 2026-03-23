@@ -208,7 +208,7 @@ func TestChunkMarkdown_OverlapBetweenChunks(t *testing.T) {
 	// With overlap=20, consecutive chunks should share some content
 	for i := 1; i < len(chunks); i++ {
 		prevEnd := chunks[i-1][len(chunks[i-1])-10:] // last 10 chars of prev
-		currStart := chunks[i][:10]                    // first 10 chars of curr
+		currStart := chunks[i][:10]                  // first 10 chars of curr
 
 		// They don't need to match exactly due to natural break finding,
 		// but the overlap mechanism means the second chunk should start
@@ -228,7 +228,7 @@ func TestIsProductListing(t *testing.T) {
 	}{
 		{
 			name: "product page with many prices and links",
-			md: strings.Repeat("$19.99 [Product](https://example.com/p)\n", 15),
+			md:   strings.Repeat("$19.99 [Product](https://example.com/p)\n", 15),
 			want: true,
 		},
 		{

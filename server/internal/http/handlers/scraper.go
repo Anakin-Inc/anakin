@@ -411,11 +411,11 @@ func (h *ScraperHandler) GetBatchJob(c *fiber.Ctx) error {
 }
 
 type scrapeResultJSON struct {
-	HTML          *string                        `json:"html,omitempty"`
-	CleanedHTML   *string                        `json:"cleanedHtml,omitempty"`
-	Markdown      *string                        `json:"markdown,omitempty"`
-	GeneratedJson *models.GeneratedJsonResponse  `json:"generatedJson,omitempty"`
-	Cached        *bool                          `json:"cached,omitempty"`
+	HTML          *string                       `json:"html,omitempty"`
+	CleanedHTML   *string                       `json:"cleanedHtml,omitempty"`
+	Markdown      *string                       `json:"markdown,omitempty"`
+	GeneratedJson *models.GeneratedJsonResponse `json:"generatedJson,omitempty"`
+	Cached        *bool                         `json:"cached,omitempty"`
 }
 
 func createJobInDB(db *sql.DB, id, jobType, url, country string, payload []byte, forceFresh bool, parentJobID *string) error {

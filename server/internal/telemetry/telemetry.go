@@ -123,10 +123,10 @@ type payload struct {
 	} `json:"status"`
 
 	Duration struct {
-		Under1s int64 `json:"under_1s"`
+		Under1s    int64 `json:"under_1s"`
 		From1to5s  int64 `json:"from_1s_to_5s"`
 		From5to30s int64 `json:"from_5s_to_30s"`
-		Over30s int64 `json:"over_30s"`
+		Over30s    int64 `json:"over_30s"`
 	} `json:"duration"`
 
 	Features struct {
@@ -139,12 +139,12 @@ type payload struct {
 
 // StatusResponse is returned by the /v1/telemetry/status endpoint.
 type StatusResponse struct {
-	Enabled    bool        `json:"enabled"`
-	InstanceID string      `json:"instance_id,omitempty"`
-	Version    string      `json:"version,omitempty"`
-	UptimeH    float64     `json:"uptime_hours,omitempty"`
-	LastSentAt *time.Time  `json:"last_sent_at,omitempty"`
-	SendCount  int64       `json:"send_count,omitempty"`
+	Enabled     bool       `json:"enabled"`
+	InstanceID  string     `json:"instance_id,omitempty"`
+	Version     string     `json:"version,omitempty"`
+	UptimeH     float64    `json:"uptime_hours,omitempty"`
+	LastSentAt  *time.Time `json:"last_sent_at,omitempty"`
+	SendCount   int64      `json:"send_count,omitempty"`
 	NextPayload *payload   `json:"next_payload,omitempty"`
 }
 

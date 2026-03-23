@@ -44,9 +44,11 @@ func NewHTTPHandler(timeout time.Duration, proxyURL string) *HTTPHandler {
 	}
 }
 
-func (h *HTTPHandler) Name() string                                                   { return "http" }
-func (h *HTTPHandler) CanHandle(_ context.Context, req *models.HandlerRequest) bool { return !req.UseBrowser }
-func (h *HTTPHandler) IsHealthy() bool                                                { return true }
+func (h *HTTPHandler) Name() string { return "http" }
+func (h *HTTPHandler) CanHandle(_ context.Context, req *models.HandlerRequest) bool {
+	return !req.UseBrowser
+}
+func (h *HTTPHandler) IsHealthy() bool { return true }
 
 func (h *HTTPHandler) Scrape(ctx context.Context, req *models.HandlerRequest) (*models.ScrapeResult, error) {
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodGet, req.URL, nil)
