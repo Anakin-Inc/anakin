@@ -41,7 +41,7 @@ curl -s -X POST http://localhost:8080/v1/scrape \
 - **Proxy auto-select** — [Thompson Sampling](https://en.wikipedia.org/wiki/Thompson_sampling) picks the best proxy per domain, learning from success/failure in real time. [Docs →](docs/proxy-pool.md)
 - **Structured JSON extraction** — use Gemini AI to extract structured data from any page (bring your own API key)
 - **Sync + async + batch API** — `POST /v1/scrape` for instant results, `/v1/url-scraper` for async with polling, batch up to 10 URLs
-- **HTML to Markdown** — intelligent content extraction with boilerplate removal
+- **LLM-ready markdown** — automatic boilerplate removal, clean content extraction. Feed directly into RAG pipelines, Claude, GPT, or any LLM without preprocessing
 - **Web dashboard** — built-in React UI for scraping, job tracking, domain config management, and proxy monitoring
 - **Zero-config mode** — run with just Go, no database needed. Or use Docker for the full stack
 - **Self-contained** — no Redis, no AWS, no message queues. Single Go binary. Optional PostgreSQL for persistence
