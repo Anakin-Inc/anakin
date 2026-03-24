@@ -30,7 +30,8 @@ curl -s -X POST http://localhost:8080/v1/scrape \
 - **Structured JSON extraction** — use Gemini AI to extract structured data from any page (bring your own API key)
 - **HTML to Markdown** — intelligent content extraction with boilerplate removal
 - **Web dashboard** — built-in React UI for scraping, job tracking, domain config management, and proxy monitoring
-- **Self-contained** — just PostgreSQL + one Go binary + anti-detect browser. No Redis, no AWS, no message queues
+- **Zero-config mode** — run with just Go, no PostgreSQL needed. Or use Docker for the full stack
+- **Self-contained** — no Redis, no AWS, no message queues. Optional PostgreSQL for persistence
 
 ## Try It Now (no install)
 
@@ -47,7 +48,22 @@ curl -s -X POST https://api.anakin.io/v1/scrape \
 
 Same API, same response format. When you're ready to self-host, continue below.
 
-## Self-Host (Docker)
+## Quick Start (no Docker, no database)
+
+Just Go 1.25+. Two commands:
+
+```bash
+cd server && go run cmd/server/main.go
+
+# In another terminal:
+curl -s -X POST http://localhost:8080/v1/scrape \
+  -H "Content-Type: application/json" \
+  -d '{"url": "https://example.com"}' | jq .markdown
+```
+
+Jobs are stored in memory (lost on restart). For persistence, set `DATABASE_URL`. For JavaScript-heavy sites, add the browser service via Docker.
+
+## Self-Host (Docker — full stack)
 
 ### Prerequisites
 
@@ -120,27 +136,27 @@ No API keys required for the scraper itself. Just JSON in, results out.
 ```
                     ┌─────────────────┐
                     │   Your App      │
-                    │   (cURL / code) │
+                    │   (cURL / CLI)  │
                     └────────┬────────┘
                              │ HTTP
                              ▼
                     ┌─────────────────┐         ┌──────────┐
-                    │     Server      │         │  Gemini  │
-                    │   (Go/Fiber)    │────────▶│  2.5     │
-                    │   API + Workers │ optional│  Flash   │
+                    │     Server      │────────▶│  Gemini  │
+                    │   (Go/Fiber)    │ optional│  (JSON)  │
                     │   Port 8080     │         └──────────┘
-                    └──┬─────┬────┬──┘
-                       │     │    │
-            ┌──────────┘     │    └────────────┐
-            ▼                ▼                  ▼ (hourly, anonymous)
-      ┌──────────┐  ┌──────────────┐  ┌──────────────────┐
-      │PostgreSQL │  │   Browser    │  │ telemetry.       │
-      │  jobs +   │  │   Service    │  │ anakin.io        │
-      │  configs  │  │  (Camoufox)  │  │ (opt-out: off)   │
-      └──────────┘  └──────────────┘  └──────────────────┘
+                    └──┬──────┬───┬──┘
+                       │      │   │
+            ┌──────────┘      │   └────────────┐
+            ▼                 ▼                 ▼
+      ┌──────────┐   ┌──────────────┐   ┌──────────────┐
+      │ Storage  │   │   Browser    │   │ API Handler  │
+      │ Postgres │   │   Service    │   │ (anakin.io   │
+      │ or memory│   │  (Camoufox)  │   │  or custom)  │
+      │(optional)│   │  (optional)  │   │  (optional)  │
+      └──────────┘   └──────────────┘   └──────────────┘
 ```
 
-The server is a single Go binary. API handlers accept requests, insert jobs into PostgreSQL, and push them to an in-process worker pool via Go channels. Workers execute the handler chain (HTTP fetch → browser fallback), convert HTML to markdown, optionally extract structured JSON via Gemini, and write results back to the database. No external queues or object storage.
+The server is a single Go binary that runs with zero dependencies. Optionally add PostgreSQL for persistence, the browser service for JavaScript-heavy sites, and API handlers for hard-to-scrape sites. Workers execute the handler chain (HTTP → browser → API fallback), convert HTML to markdown, and optionally extract structured JSON via Gemini.
 
 ## API Reference
 
@@ -244,7 +260,7 @@ All configuration via environment variables:
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `PORT` | `8080` | Server port |
-| `DATABASE_URL` | — | PostgreSQL connection string (**required**) |
+| `DATABASE_URL` | — | PostgreSQL connection string (optional — uses in-memory storage when not set) |
 | `BROWSER_WS_URL` | `ws://localhost:9222/camoufox` | Browser service WebSocket URL |
 | `BROWSER_TIMEOUT` | `60` | Page navigation timeout (seconds) |
 | `BROWSER_LOAD_WAIT` | `2` | Extra wait after page load (seconds) |
@@ -274,6 +290,7 @@ anakinscraper-oss/
 │       ├── converter/          # HTML → Markdown
 │       ├── gemini/             # Gemini AI JSON extraction
 │       ├── domain/             # Domain configs + failure detection
+│       ├── store/              # Job storage (PostgreSQL or in-memory)
 │       ├── proxy/              # Proxy pool + Thompson Sampling
 │       ├── telemetry/          # Anonymous usage telemetry
 │       ├── processor/          # Job processing
@@ -293,16 +310,24 @@ anakinscraper-oss/
 
 ### Running Locally (without Docker)
 
-**Prerequisites:** Go 1.25+, Python 3.11+, Node.js 18+, PostgreSQL
+**Minimal (Go only):**
 
 ```bash
-# Terminal 1: PostgreSQL (if not running)
+cd server && go run cmd/server/main.go
+```
+
+No database, no browser service. HTTP handler scrapes static sites. Jobs stored in memory.
+
+**Full local stack (Go + Python + PostgreSQL):**
+
+```bash
+# Terminal 1: PostgreSQL
 docker compose up postgres -d
 
-# Terminal 2: Browser Service
+# Terminal 2: Browser Service (for JS-heavy sites)
 cd browser-service && pip install -r requirements.txt && python server.py
 
-# Terminal 3: Server
+# Terminal 3: Server with persistence
 cd server && DATABASE_URL="postgres://postgres:postgres@localhost:5432/anakinscraper?sslmode=disable" go run cmd/server/main.go
 ```
 
