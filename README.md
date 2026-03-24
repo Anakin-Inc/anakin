@@ -33,16 +33,18 @@ curl -s -X POST http://localhost:8080/v1/scrape \
 
 ## Features
 
-- **Sync + async API** — `POST /v1/scrape` returns the result directly; `/v1/url-scraper` for async with polling
-- **Batch scraping** — scrape up to 10 URLs in one request
-- **Handler chain** — fast HTTP fetch with automatic fallback to [Camoufox](https://github.com/daijro/camoufox) anti-detect browser
-- **Domain configs** — per-domain scraping strategies: handler selection, timeouts, retries, content validation, custom headers, domain blocking
-- **Proxy auto-select** — [Thompson Sampling](https://en.wikipedia.org/wiki/Thompson_sampling) picks the best proxy per domain from a pool, learning from success/failure
+- **Handler chain with fallback** — HTTP fetch → anti-detect browser → external API. Each handler tries in order; if one fails, the next picks up automatically
+- **Custom API handlers** — plug in any third-party scraping service (ScrapingBee, Browserless, etc.) as a chain fallback. Built-in [anakin.io](https://anakin.io) handler included. [How to add your own →](#adding-custom-api-handlers)
+- **Domain configs** — per-domain scraping strategies: choose which handlers to use, set timeouts, retries, custom headers, block domains, and validate content with pattern matching
+- **Failure detection** — define failure patterns and required patterns per domain. If the scraped content matches a failure pattern (e.g. CAPTCHA page) or misses a required pattern, the job auto-retries with the next handler
+- **Anti-detect browser** — [Camoufox](https://github.com/daijro/camoufox) (anti-detect Firefox) with realistic fingerprints, not headless Chrome
+- **Proxy auto-select** — [Thompson Sampling](https://en.wikipedia.org/wiki/Thompson_sampling) picks the best proxy per domain, learning from success/failure in real time
 - **Structured JSON extraction** — use Gemini AI to extract structured data from any page (bring your own API key)
+- **Sync + async + batch API** — `POST /v1/scrape` for instant results, `/v1/url-scraper` for async with polling, batch up to 10 URLs
 - **HTML to Markdown** — intelligent content extraction with boilerplate removal
 - **Web dashboard** — built-in React UI for scraping, job tracking, domain config management, and proxy monitoring
-- **Zero-config mode** — run with just Go, no PostgreSQL needed. Or use Docker for the full stack
-- **Self-contained** — no Redis, no AWS, no message queues. Optional PostgreSQL for persistence
+- **Zero-config mode** — run with just Go, no database needed. Or use Docker for the full stack
+- **Self-contained** — no Redis, no AWS, no message queues. Single Go binary. Optional PostgreSQL for persistence
 
 ## Quick Start (no Docker, no database)
 
