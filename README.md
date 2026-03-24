@@ -20,6 +20,17 @@ curl -s -X POST http://localhost:8080/v1/scrape \
   -d '{"url": "https://example.com"}' | jq .markdown
 ```
 
+## Why AnakinScraper?
+
+| | AnakinScraper | Firecrawl | Crawlee | Scrapy |
+|---|---|---|---|---|
+| Anti-detect browser | Camoufox (Firefox) | Headless Chrome | Playwright | No |
+| Smart proxy selection | Thompson Sampling (ML) | Round-robin | Manual | Manual |
+| Zero-config start | `go run` — no DB needed | Docker required | npm install | pip install |
+| Single binary | Go — one 30MB binary | Node.js | Node.js | Python |
+| Handler chain fallback | HTTP → Browser → API | Single mode | Single mode | Single mode |
+| Structured JSON (AI) | Gemini extraction | LLM extraction | No | No |
+
 ## Features
 
 - **Sync + async API** — `POST /v1/scrape` returns the result directly; `/v1/url-scraper` for async with polling
