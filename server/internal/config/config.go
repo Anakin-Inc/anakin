@@ -34,6 +34,9 @@ type Config struct {
 	// Gemini (optional — enables generateJson)
 	GeminiAPIKey string
 
+	// Anakin.io API handler (optional — fallback when local handlers fail)
+	AnakinAPIKey string
+
 	// Telemetry (anonymous usage data — opt-out via TELEMETRY=off)
 	TelemetryEnabled bool
 	TelemetryURL     string
@@ -57,6 +60,7 @@ func Load() (*Config, error) {
 		ProxyURL:         os.Getenv("PROXY_URL"),
 		ProxyURLs:        getStringSliceEnv("PROXY_URLS"),
 		GeminiAPIKey:     os.Getenv("GEMINI_API_KEY"),
+		AnakinAPIKey:     os.Getenv("ANAKIN_API_KEY"),
 		TelemetryEnabled: getBoolEnvDefault("TELEMETRY", true),
 		TelemetryURL:     os.Getenv("TELEMETRY_URL"),
 		LogLevel:         getEnvOrDefault("LOG_LEVEL", "INFO"),

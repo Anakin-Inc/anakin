@@ -192,12 +192,35 @@ See [docs/API.md](docs/API.md) for the complete API reference. Quick overview:
 Each scrape job goes through the handler chain. On failure, it falls back to the next handler:
 
 ```
-HTTP Handler (fast, ~200ms) ──fail──▶ Browser Handler (Camoufox, anti-detect Firefox)
+HTTP Handler (fast, ~200ms) ──fail──▶ Browser Handler (Camoufox) ──fail──▶ API Handler (optional)
 ```
 
 **HTTP Handler** — direct HTTP GET with a browser user-agent. Handles static HTML, server-rendered pages. No browser overhead.
 
 **Browser Handler** — connects to [Camoufox](https://github.com/daijro/camoufox) (anti-detect Firefox) over WebSocket via Playwright protocol. Full JavaScript rendering, network-idle detection, realistic browser fingerprints. Handles SPAs, lazy-loaded content, and sites with anti-bot protection.
+
+**API Handler** (optional) — delegates to an external scraping API when local handlers fail. Set `ANAKIN_API_KEY` to enable the built-in [anakin.io](https://anakin.io) fallback for hard-to-scrape sites (Cloudflare, DataDome, etc.). See [Adding Custom API Handlers](#adding-custom-api-handlers) below.
+
+### Adding Custom API Handlers
+
+The API handler pattern makes it easy to integrate any third-party scraping service as a chain fallback. The built-in anakin.io handler (`server/internal/handler/api.go`) is a working example — copy and modify it for your provider:
+
+1. **Copy** `api.go` to `my_provider.go`
+2. **Add a constructor** like `NewAnakinHandler` — set your provider's URL, auth header name, and response format
+3. **Register** in `main.go`:
+   ```go
+   if cfg.MyProviderAPIKey != "" {
+       handlers = append(handlers, handler.NewAPIHandler(handler.APIHandlerConfig{
+           Name:       "my-provider",
+           APIURL:     "https://api.my-provider.com/scrape",
+           APIKey:     cfg.MyProviderAPIKey,
+           AuthHeader: "Authorization",  // or "X-API-Key", "Bearer", etc.
+       }))
+   }
+   ```
+4. **Add env var** to `config.go`: `MyProviderAPIKey: os.Getenv("MY_PROVIDER_API_KEY")`
+
+API keys always come from environment variables — never hardcoded. The handler only activates when its key is set.
 
 ### Extending the Chain
 
@@ -231,6 +254,7 @@ All configuration via environment variables:
 | `PROXY_URL` | — | Default HTTP proxy for the HTTP handler |
 | `PROXY_URLS` | — | Comma-separated proxy pool for auto-selection (Thompson Sampling) |
 | `GEMINI_API_KEY` | — | Google Gemini API key for structured JSON extraction ([get one free](https://aistudio.google.com/apikey)) |
+| `ANAKIN_API_KEY` | — | [anakin.io](https://anakin.io) API key — enables hosted API as chain fallback for hard-to-scrape sites |
 | `LOG_LEVEL` | `INFO` | Log level (DEBUG, INFO, WARN, ERROR) |
 | `TELEMETRY` | `on` | Anonymous usage telemetry (`off` to disable — see [TELEMETRY.md](TELEMETRY.md)) |
 | `TELEMETRY_URL` | — | Custom telemetry endpoint (defaults to `https://telemetry.anakin.io/v1/collect`) |

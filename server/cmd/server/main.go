@@ -74,10 +74,18 @@ func main() {
 		jobStore = store.NewMemoryStore()
 	}
 
-	// Build handler chain: HTTP -> Browser
+	// Build handler chain: HTTP -> Browser -> [API fallback]
 	httpHandler := handler.NewHTTPHandler(cfg.BrowserTimeout, cfg.ProxyURL)
 	browserHandler := handler.NewBrowserHandler(cfg.BrowserWSURL, cfg.BrowserTimeout, cfg.BrowserLoadWait)
-	chain := handler.NewChain([]handler.ScrapingHandler{httpHandler, browserHandler})
+	handlers := []handler.ScrapingHandler{httpHandler, browserHandler}
+
+	// Anakin.io API fallback (optional — set ANAKIN_API_KEY to enable)
+	if cfg.AnakinAPIKey != "" {
+		handlers = append(handlers, handler.NewAnakinHandler(cfg.AnakinAPIKey))
+		slog.Info("anakin.io API handler enabled as chain fallback")
+	}
+
+	chain := handler.NewChain(handlers)
 	slog.Info("handler chain initialized", "handlers", chain.HandlerNames())
 
 	bgCtx, bgCancel := context.WithCancel(context.Background())
