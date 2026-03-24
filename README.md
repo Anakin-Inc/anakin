@@ -34,7 +34,7 @@ curl -s -X POST http://localhost:8080/v1/scrape \
 ## Features
 
 - **Handler chain with fallback** — HTTP fetch → anti-detect browser → external API. Each handler tries in order; if one fails, the next picks up automatically. Most pages resolve on the free local HTTP handler — paid APIs are only called for the ~5% that actually need them. [Docs →](docs/handlers.md)
-- **Custom API handlers** — plug in any third-party scraping service (ScrapingBee, Browserless, etc.) as a chain fallback. Only invoked when local handlers fail — saves 90%+ on API costs vs routing everything through a paid service. Built-in [anakin.io](https://anakin.io) handler included. [How to add your own →](docs/handlers.md#example-adding-a-third-party-api-handler)
+- **Custom API handlers** — plug in any third-party scraping service as a chain fallback. Only invoked when local handlers fail — saves 90%+ on API costs vs routing everything through a paid service. Built-in [anakin.io](https://anakin.io) handler included. [How to add your own →](docs/handlers.md#example-adding-a-third-party-api-handler)
 - **Domain configs** — per-domain scraping strategies: choose which handlers to use, set timeouts, retries, custom headers, block domains, and validate content with pattern matching. [Docs →](docs/domain-configs.md)
 - **Failure detection** — define failure patterns and required patterns per domain. If the scraped content matches a failure pattern (e.g. CAPTCHA page) or misses a required pattern, the job auto-retries with the next handler. [Docs →](docs/domain-configs.md#failure-detection)
 - **Anti-detect browser** — [Camoufox](https://github.com/daijro/camoufox) (anti-detect Firefox) with realistic fingerprints, not headless Chrome. [Docs →](docs/handlers.md#browser-handler)

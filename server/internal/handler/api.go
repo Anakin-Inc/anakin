@@ -29,7 +29,7 @@ import (
 //
 // CUSTOM THIRD-PARTY (copy this pattern):
 //
-//	To add ScrapingBee, Browserless, Apify, or any service:
+//	To add any third-party scraping service:
 //	1. Copy this file
 //	2. Change Name(), requestBody(), and parseResponse() for your provider's API format
 //	3. Register in main.go: chain = append(chain, NewMyHandler(apiKey))

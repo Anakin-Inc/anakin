@@ -139,12 +139,12 @@ The easiest way to add a new external service is to use the built-in `APIHandler
 
 ```go
 // In main.go:
-if cfg.ScrapingBeeAPIKey != "" {
+if cfg.ExternalAPIKey != "" {
     handlers = append(handlers, handler.NewAPIHandler(handler.APIHandlerConfig{
-        Name:       "scrapingbee",
-        APIURL:     "https://app.scrapingbee.com/api/v1",
-        APIKey:     cfg.ScrapingBeeAPIKey,
-        AuthHeader: "api_key",     // ScrapingBee uses query param, but header works too
+        Name:       "my-scraping-service",
+        APIURL:     "https://api.example.com/v1/scrape",
+        APIKey:     cfg.ExternalAPIKey,
+        AuthHeader: "X-Api-Key",
         Timeout:    30 * time.Second,
     }))
 }
@@ -153,7 +153,7 @@ if cfg.ScrapingBeeAPIKey != "" {
 Then add to `config.go`:
 
 ```go
-ScrapingBeeAPIKey: os.Getenv("SCRAPINGBEE_API_KEY"),
+ExternalAPIKey: os.Getenv("EXTERNAL_API_KEY"),
 ```
 
 The handler only activates when the env var is set. No impact on users who don't use it.
