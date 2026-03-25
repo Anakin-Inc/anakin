@@ -63,6 +63,10 @@ cd server && go test ./...
 5. Commit with a descriptive message
 6. Open a pull request against `master`
 
+## Questions & Discussion
+
+Join our [Discord](https://discord.com/invite/T57dHrdT8u) for questions, help, and discussion.
+
 ## Reporting Issues
 
 Open an issue on GitHub with:

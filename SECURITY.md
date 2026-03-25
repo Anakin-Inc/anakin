@@ -13,7 +13,7 @@ We only provide security fixes for the latest release. Please upgrade to the lat
 
 **Do NOT open a public GitHub issue for security vulnerabilities.**
 
-Email **security@anakin.io** with:
+Report via our **[Discord server](https://discord.com/invite/T57dHrdT8u)** with:
 
 - Description of the vulnerability
 - Steps to reproduce

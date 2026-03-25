@@ -405,6 +405,10 @@ anakin scrape "https://example.com"  # now routes through hosted
 
 [Try it free →](https://anakin.io)
 
+## Community
+
+Join our [Discord](https://discord.com/invite/T57dHrdT8u) for questions, discussion, and support.
+
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md).
