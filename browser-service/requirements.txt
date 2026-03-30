@@ -1,0 +1,2 @@
+camoufox[geoip]
+playwright==1.57.0

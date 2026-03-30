@@ -1,0 +1,46 @@
+# Binaries
+*.exe
+*.dll
+*.so
+*.dylib
+/server/server
+
+# Go
+vendor/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+venv/
+.venv/
+
+# Node
+node_modules/
+dist/
+*.tgz
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker
+docker-compose.override.yml
+
+# Temp
+tmp/
+*.log
+*/anakinscraper
+.gstack/
