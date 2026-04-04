@@ -42,6 +42,7 @@ type ScrapeRequest struct {
 	ForceFresh   bool   `json:"forceFresh,omitempty"`
 	UseBrowser   bool   `json:"useBrowser,omitempty"`
 	GenerateJson bool   `json:"generateJson,omitempty"`
+	Timeout      int    `json:"timeout,omitempty"` // Timeout in seconds for sync scrape (default: 30, max: 120)
 }
 
 // BatchScrapeRequest is the request body for batch URL scraping.

@@ -115,11 +115,21 @@ func (h *ScraperHandler) ScrapeSync(c *fiber.Ctx) error {
 
 	slog.Info("sync scrape started", "jobId", jobID, "url", req.URL)
 
-	// Poll store until job completes or 30s timeout
+	// Poll store until job completes or timeout expires.
+	// Timeout is configurable via request body (default: 30s, max: 120s).
 	const (
-		pollInterval = 500 * time.Millisecond
-		maxWait      = 30 * time.Second
+		pollInterval   = 500 * time.Millisecond
+		defaultTimeout = 30 * time.Second
+		maxTimeout     = 120 * time.Second
 	)
+	maxWait := defaultTimeout
+	if req.Timeout > 0 {
+		requested := time.Duration(req.Timeout) * time.Second
+		if requested > maxTimeout {
+			requested = maxTimeout
+		}
+		maxWait = requested
+	}
 	deadline := time.Now().Add(maxWait)
 	ticker := time.NewTicker(pollInterval)
 	defer ticker.Stop()
