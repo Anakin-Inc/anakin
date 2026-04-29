@@ -15,6 +15,7 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
 	"github.com/gofiber/fiber/v2/middleware/logger"
+	"github.com/gofiber/fiber/v2/middleware/limiter"
 	"github.com/gofiber/fiber/v2/middleware/recover"
 	"github.com/joho/godotenv"
 	_ "github.com/lib/pq"
@@ -139,6 +140,20 @@ func main() {
 		AllowMethods: "GET,POST,PUT,DELETE,OPTIONS",
 		AllowHeaders: "Origin,Content-Type,Accept,Authorization,X-API-Key,Api-Key",
 	}))
+
+	// Rate limiting (per-IP). Controlled via RATE_LIMIT (requests per minute). 0 = disabled.
+	if cfg.RateLimit > 0 {
+		app.Use(limiter.New(limiter.Config{
+			Max:        cfg.RateLimit,
+			Expiration: 60 * time.Second,
+			LimitReached: func(c *fiber.Ctx) error {
+				return c.Status(fiber.StatusTooManyRequests).JSON(fiber.Map{
+					"error":   "rate_limited",
+					"message": "rate limit exceeded",
+				})
+			},
+		}))
+	}
 
 	// Setup routes
 	router.Setup(app, jobStore, db, pool, proxyPool, tel)

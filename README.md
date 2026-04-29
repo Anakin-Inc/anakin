@@ -273,6 +273,7 @@ All configuration via environment variables:
 | `TELEMETRY` | `on` | Anonymous usage telemetry (`off` to disable — see [TELEMETRY.md](TELEMETRY.md)) |
 | `TELEMETRY_URL` | — | Custom telemetry endpoint (defaults to `https://telemetry.anakin.io/v1/collect`) |
 | `DISABLE_HOSTED_HINTS` | — | Set to `true` to suppress hosted service tips in error messages |
+| `RATE_LIMIT` | `60` | Requests per minute per IP (0 = disabled) |
 
 ## Project Structure
 
