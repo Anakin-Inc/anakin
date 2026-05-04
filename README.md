@@ -167,8 +167,9 @@ See [docs/API.md](docs/API.md) for the complete API reference. Quick overview:
 | `GET` | `/v1/url-scraper/:id` | Poll for async job result |
 | `POST` | `/v1/url-scraper/batch` | Batch scrape up to 10 URLs |
 | `GET` | `/v1/url-scraper/batch/:id` | Poll for batch result |
-| `POST` | `/v1/domain-configs` | Create a per-domain scraping config |
-| `GET` | `/v1/domain-configs` | List all domain configs |
+| `POST` | `/v1/domain-configs` | Create a per-domain scraping config (requires PostgreSQL) |
+| `GET` | `/v1/domain-configs` | List all domain configs (requires PostgreSQL) |
+| `GET` | `/v1/stats` | View aggregate scrape stats (requires PostgreSQL; returns `503` when `DATABASE_URL` is not set) |
 | `GET` | `/v1/proxy/scores` | View proxy Thompson Sampling scores |
 | `GET` | `/v1/telemetry/status` | View telemetry state and next payload ([details](TELEMETRY.md)) |
 | `GET` | `/health` | Health check |
