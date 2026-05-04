@@ -33,11 +33,13 @@ func Setup(app *fiber.App, s store.JobStore, db *sql.DB, pool *worker.Pool, prox
 
 	if db != nil {
 		domainConfigHandler := handlers.NewDomainConfigHandler(db)
+		statsHandler := handlers.NewStatsHandler(db)
 		v1.Get("/domain-configs", domainConfigHandler.List)
 		v1.Post("/domain-configs", domainConfigHandler.Create)
 		v1.Get("/domain-configs/:domain", domainConfigHandler.Get)
 		v1.Put("/domain-configs/:domain", domainConfigHandler.Update)
 		v1.Delete("/domain-configs/:domain", domainConfigHandler.Delete)
+		v1.Get("/stats", statsHandler.Get)
 	} else {
 		// Return helpful error when domain configs are unavailable without DB
 		noDB := func(c *fiber.Ctx) error {
@@ -50,6 +52,7 @@ func Setup(app *fiber.App, s store.JobStore, db *sql.DB, pool *worker.Pool, prox
 		v1.Get("/domain-configs/:domain", noDB)
 		v1.Put("/domain-configs/:domain", noDB)
 		v1.Delete("/domain-configs/:domain", noDB)
+		v1.Get("/stats", noDB)
 	}
 
 	v1.Get("/proxy/scores", proxyScoresHandler.GetScores)

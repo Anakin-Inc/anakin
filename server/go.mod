@@ -3,6 +3,7 @@ module github.com/Anakin-Inc/anakinscraper-oss/server
 go 1.25.0
 
 require (
+	github.com/DATA-DOG/go-sqlmock v1.5.2
 	github.com/JohannesKaufmann/html-to-markdown/v2 v2.2.2
 	github.com/PuerkitoBio/goquery v1.9.2
 	github.com/gofiber/fiber/v2 v2.52.12
