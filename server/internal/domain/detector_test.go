@@ -12,6 +12,7 @@ func TestDetector_Check(t *testing.T) {
 		cfg := &DomainConfig{
 			FailurePatterns: []string{"Access Denied", "captcha"},
 		}
+		compilePatterns(cfg)
 		result := d.Check(cfg, "<html><body>Access Denied - Please verify you are human</body></html>")
 		if !result.Failed {
 			t.Error("expected failure when content matches a failure pattern")
@@ -28,6 +29,7 @@ func TestDetector_Check(t *testing.T) {
 		cfg := &DomainConfig{
 			FailurePatterns: []string{"Access Denied", "captcha"},
 		}
+		compilePatterns(cfg)
 		result := d.Check(cfg, "<html><body>Please solve the captcha below</body></html>")
 		if !result.Failed {
 			t.Error("expected failure when content matches second failure pattern")
@@ -38,6 +40,7 @@ func TestDetector_Check(t *testing.T) {
 		cfg := &DomainConfig{
 			FailurePatterns: []string{"Access Denied", "captcha"},
 		}
+		compilePatterns(cfg)
 		result := d.Check(cfg, "<html><body><h1>Welcome</h1><p>Page content here</p></body></html>")
 		if result.Failed {
 			t.Errorf("expected pass when content does not match failure patterns, got reason: %q", result.Reason)
@@ -48,6 +51,7 @@ func TestDetector_Check(t *testing.T) {
 		cfg := &DomainConfig{
 			RequiredPatterns: []string{"<article", "<div class=\"content\""},
 		}
+		compilePatterns(cfg)
 		result := d.Check(cfg, `<html><body><article>Some article content</article></body></html>`)
 		if result.Failed {
 			t.Errorf("expected pass when content matches required pattern, got reason: %q", result.Reason)
@@ -58,6 +62,7 @@ func TestDetector_Check(t *testing.T) {
 		cfg := &DomainConfig{
 			RequiredPatterns: []string{"<article", `<div class="content"`},
 		}
+		compilePatterns(cfg)
 		result := d.Check(cfg, "<html><body><p>Just a simple paragraph</p></body></html>")
 		if !result.Failed {
 			t.Error("expected failure when content does not match any required pattern")
@@ -124,6 +129,7 @@ func TestDetector_Check(t *testing.T) {
 		cfg := &DomainConfig{
 			FailurePatterns: []string{"[invalid(regex"},
 		}
+		compilePatterns(cfg)
 		// Should not panic
 		result := d.Check(cfg, "<html><body>Some content</body></html>")
 		if result.Failed {
@@ -135,6 +141,7 @@ func TestDetector_Check(t *testing.T) {
 		cfg := &DomainConfig{
 			RequiredPatterns: []string{"[invalid(regex"},
 		}
+		compilePatterns(cfg)
 		// Should not panic; the invalid pattern is skipped and since
 		// no valid pattern can match, it reports failure
 		result := d.Check(cfg, "<html><body>Some content</body></html>")
@@ -147,6 +154,7 @@ func TestDetector_Check(t *testing.T) {
 		cfg := &DomainConfig{
 			FailurePatterns: []string{`\b403\b.*Forbidden`},
 		}
+		compilePatterns(cfg)
 		result := d.Check(cfg, "<html><body>Error 403 Forbidden</body></html>")
 		if !result.Failed {
 			t.Error("expected regex failure pattern to match")
@@ -157,6 +165,7 @@ func TestDetector_Check(t *testing.T) {
 		cfg := &DomainConfig{
 			FailurePatterns: []string{`\b403\b.*Forbidden`},
 		}
+		compilePatterns(cfg)
 		result := d.Check(cfg, "<html><body>Page loaded successfully</body></html>")
 		if result.Failed {
 			t.Errorf("expected regex failure pattern not to match, got reason: %q", result.Reason)
@@ -209,6 +218,7 @@ func TestDetector_Check(t *testing.T) {
 			FailurePatterns:  []string{"blocked"},
 			RequiredPatterns: []string{"<article"},
 		}
+		compilePatterns(cfg)
 		// Content matches both a failure pattern and a required pattern
 		result := d.Check(cfg, "<article>You have been blocked</article>")
 		if !result.Failed {
@@ -218,4 +228,29 @@ func TestDetector_Check(t *testing.T) {
 			t.Errorf("expected failure pattern reason, got: %q", result.Reason)
 		}
 	})
+}
+
+func TestCheck_UsesCompiledPatterns(t *testing.T) {
+	cfg := &DomainConfig{
+		FailurePatterns:  []string{`blocked`},
+		RequiredPatterns: []string{`<html`},
+	}
+	compilePatterns(cfg)
+
+	det := NewDetector()
+
+	res := det.Check(cfg, "you are blocked")
+	if !res.Failed {
+		t.Error("expected failure on failure pattern")
+	}
+
+	res = det.Check(cfg, "plain text only")
+	if !res.Failed {
+		t.Error("expected failure when required pattern missing")
+	}
+
+	res = det.Check(cfg, "<html><body>ok</body></html>")
+	if res.Failed {
+		t.Errorf("expected success, got: %s", res.Reason)
+	}
 }

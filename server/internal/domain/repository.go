@@ -6,6 +6,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"regexp"
 	"strings"
 	"time"
 )
@@ -125,6 +126,7 @@ func scanConfig(rows *sql.Rows) (*DomainConfig, error) {
 	cfg.ProxyURL = proxyURL.String
 	cfg.BlockedReason = blockedReason.String
 	cfg.Notes = notes.String
+	compilePatterns(&cfg)
 	return &cfg, nil
 }
 
@@ -150,6 +152,7 @@ func scanConfigRow(row *sql.Row) (*DomainConfig, error) {
 	cfg.ProxyURL = proxyURL.String
 	cfg.BlockedReason = blockedReason.String
 	cfg.Notes = notes.String
+	compilePatterns(&cfg)
 	return &cfg, nil
 }
 
@@ -196,4 +199,24 @@ func nullString(s string) sql.NullString {
 		return sql.NullString{}
 	}
 	return sql.NullString{String: s, Valid: true}
+}
+
+func compilePatterns(cfg *DomainConfig) {
+	for _, p := range cfg.FailurePatterns {
+		if p == "" {
+			continue
+		}
+		if re, err := regexp.Compile(p); err == nil {
+			cfg.CompiledFailurePatterns = append(cfg.CompiledFailurePatterns, re)
+		}
+	}
+
+	for _, p := range cfg.RequiredPatterns {
+		if p == "" {
+			continue
+		}
+		if re, err := regexp.Compile(p); err == nil {
+			cfg.CompiledRequiredPatterns = append(cfg.CompiledRequiredPatterns, re)
+		}
+	}
 }
