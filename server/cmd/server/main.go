@@ -23,6 +23,7 @@ import (
 	"github.com/Anakin-Inc/anakinscraper-oss/server/internal/domain"
 	"github.com/Anakin-Inc/anakinscraper-oss/server/internal/gemini"
 	"github.com/Anakin-Inc/anakinscraper-oss/server/internal/handler"
+	"github.com/Anakin-Inc/anakinscraper-oss/server/internal/http/middleware"
 	"github.com/Anakin-Inc/anakinscraper-oss/server/internal/http/router"
 	"github.com/Anakin-Inc/anakinscraper-oss/server/internal/processor"
 	"github.com/Anakin-Inc/anakinscraper-oss/server/internal/proxy"
@@ -139,6 +140,11 @@ func main() {
 		AllowMethods: "GET,POST,PUT,DELETE,OPTIONS",
 		AllowHeaders: "Origin,Content-Type,Accept,Authorization,X-API-Key,Api-Key",
 	}))
+
+	// Rate limiting (per-IP; disabled when RATE_LIMIT=0)
+	if cfg.RateLimit > 0 {
+		app.Use(middleware.RateLimit(cfg.RateLimit))
+	}
 
 	// Setup routes
 	router.Setup(app, jobStore, db, pool, proxyPool, tel)
