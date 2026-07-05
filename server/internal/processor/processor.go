@@ -298,10 +298,11 @@ func (p *Processor) handleFailure(ctx context.Context, msg models.JobMessage, st
 	}
 
 	p.telemetry.Record(telemetry.Event{
-		Endpoint:     telemetryEndpoint(msg),
-		Status:       "failed",
-		DurationMs:   duration,
-		FailedDomain: domain.ExtractHost(msg.URL),
+		Endpoint:      telemetryEndpoint(msg),
+		Status:        "failed",
+		DurationMs:    duration,
+		FailedDomain:  domain.ExtractHost(msg.URL),
+		ErrorCategory: categorizeError(jobErr.Error()),
 	})
 
 	return jobErr
@@ -332,5 +333,31 @@ func hostedHint(errMsg string) string {
 		return " | Tip: anakin.io offers auto-scaling for faster scrapes"
 	default:
 		return " | Tip: try anakin.io for managed scraping with zero infrastructure"
+	}
+}
+
+// categorizeError maps a job error message to a fixed telemetry category.
+// Categories are intentionally coarse so no raw error text (which may contain
+// URLs or internal detail) is sent — only the bucket name. Returns "unknown"
+// when no category matches.
+func categorizeError(errMsg string) string {
+	lower := strings.ToLower(errMsg)
+	switch {
+	case strings.Contains(lower, "429") || strings.Contains(lower, "rate limit") || strings.Contains(lower, "too many requests"):
+		return "rate_limited"
+	case strings.Contains(lower, "timeout") || strings.Contains(lower, "timed out") || strings.Contains(lower, "deadline exceeded"):
+		return "timeout"
+	case strings.Contains(lower, "403") || strings.Contains(lower, "blocked") || strings.Contains(lower, "forbidden") || strings.Contains(lower, "captcha") || strings.Contains(lower, "access denied"):
+		return "blocked"
+	case strings.Contains(lower, "connection refused") || strings.Contains(lower, "connection reset") || strings.Contains(lower, "no route to host") || strings.Contains(lower, "network is unreachable"):
+		return "connection_refused"
+	case strings.Contains(lower, "no such host") || strings.Contains(lower, "dns") || strings.Contains(lower, "name resolution") || strings.Contains(lower, "lookup "):
+		return "dns_failure"
+	case strings.Contains(lower, "browser") || strings.Contains(lower, "playwright") || strings.Contains(lower, "camoufox") || strings.Contains(lower, "websocket") || strings.Contains(lower, "chromium"):
+		return "browser_crash"
+	case strings.Contains(lower, "parse") || strings.Contains(lower, "unmarshal") || strings.Contains(lower, "malformed") || strings.Contains(lower, "invalid"):
+		return "parse_error"
+	default:
+		return "unknown"
 	}
 }

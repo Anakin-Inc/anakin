@@ -4,10 +4,10 @@
 //
 // DATA FLOW:
 //
-//	┌──────────┐    Record()     ┌───────────┐   hourly    ┌──────────────────┐
+//	┌──────────┐    Record()     ┌──────────┐   hourly    ┌─────────────────┐
 //	│Processor │───────────────▶│ Collector  │────────────▶│telemetry.anakin.io│
 //	│(per job) │  O(1) atomic   │(in-memory) │  HTTP POST  │   /v1/collect     │
-//	└──────────┘                └─────┬──────┘             └──────────────────┘
+//	└──────────┘                └─────┬──────┘             └─────────────────┘
 //	                                  │
 //	                                  │ Status()
 //	                                  ▼
@@ -58,6 +58,10 @@ type Event struct {
 	Status       string // "success", "failed"
 	DurationMs   int
 	FailedDomain string // domain (not URL) — only set on failure
+
+	// ErrorCategory is the coarse failure bucket (e.g. "timeout", "blocked",
+	// "dns_failure"); only set when Status is "failed".
+	ErrorCategory string
 }
 
 // Collector aggregates telemetry events in memory and sends them periodically.
@@ -86,6 +90,9 @@ type Collector struct {
 
 	// Failed domains — sync.Map for concurrent writes, domain → *atomic.Int64
 	failedDomains sync.Map
+
+	// Error categories — sync.Map, category name → *atomic.Int64
+	errorCategories sync.Map
 
 	lastSentAt atomic.Value // time.Time
 	sendCount  atomic.Int64
@@ -135,6 +142,8 @@ type payload struct {
 	} `json:"features"`
 
 	FailedDomains map[string]int64 `json:"failed_domains,omitempty"`
+
+	ErrorCategories map[string]int64 `json:"error_categories,omitempty"`
 }
 
 // StatusResponse is returned by the /v1/telemetry/status endpoint.
@@ -220,6 +229,10 @@ func (c *Collector) Record(e Event) {
 		c.statusFailed.Add(1)
 		if e.FailedDomain != "" {
 			counter, _ := c.failedDomains.LoadOrStore(e.FailedDomain, &atomic.Int64{})
+			counter.(*atomic.Int64).Add(1)
+		}
+		if e.ErrorCategory != "" {
+			counter, _ := c.errorCategories.LoadOrStore(e.ErrorCategory, &atomic.Int64{})
 			counter.(*atomic.Int64).Add(1)
 		}
 	}
@@ -379,6 +392,27 @@ func (c *Collector) snapshot(reset bool) *payload {
 	})
 	if len(fd) > 0 {
 		p.FailedDomains = fd
+	}
+
+	// Collect error categories
+	ec := make(map[string]int64)
+	c.errorCategories.Range(func(key, value any) bool {
+		category := key.(string)
+		counter := value.(*atomic.Int64)
+		if reset {
+			if v := counter.Swap(0); v > 0 {
+				ec[category] = v
+			}
+			c.errorCategories.Delete(key)
+		} else {
+			if v := counter.Load(); v > 0 {
+				ec[category] = v
+			}
+		}
+		return true
+	})
+	if len(ec) > 0 {
+		p.ErrorCategories = ec
 	}
 
 	return p
