@@ -336,26 +336,30 @@ func hostedHint(errMsg string) string {
 	}
 }
 
-// categorizeError maps a job error message to a fixed telemetry category.
-// Categories are intentionally coarse so no raw error text (which may contain
-// URLs or internal detail) is sent — only the bucket name. Returns "unknown"
-// when no category matches.
+// categorizeError maps a raw job error into a fixed telemetry bucket. It runs
+// on the underlying jobErr (before the hosted-hint suffix is appended), so hint
+// text never influences the result. Buckets are matched against the phrasing
+// the handlers actually emit — Go net/http errors from the HTTP handler (e.g.
+// "no such host", "connection refused") and Playwright/Camoufox messages from
+// the browser handler ("navigation failed", "net::err_*"/"ns_error_*").
+// Categories are coarse so no raw error text (which may contain URLs) is ever
+// sent; returns "unknown" when nothing matches.
 func categorizeError(errMsg string) string {
 	lower := strings.ToLower(errMsg)
 	switch {
-	case strings.Contains(lower, "429") || strings.Contains(lower, "rate limit") || strings.Contains(lower, "too many requests"):
+	case strings.Contains(lower, "too many requests") || strings.Contains(lower, "rate limit"):
 		return "rate_limited"
-	case strings.Contains(lower, "timeout") || strings.Contains(lower, "timed out") || strings.Contains(lower, "deadline exceeded"):
+	case strings.Contains(lower, "timeout") || strings.Contains(lower, "timed out") || strings.Contains(lower, "deadline exceeded") || strings.Contains(lower, "err_timed_out"):
 		return "timeout"
-	case strings.Contains(lower, "403") || strings.Contains(lower, "blocked") || strings.Contains(lower, "forbidden") || strings.Contains(lower, "captcha") || strings.Contains(lower, "access denied"):
+	case strings.Contains(lower, "forbidden") || strings.Contains(lower, "blocked") || strings.Contains(lower, "captcha") || strings.Contains(lower, "access denied"):
 		return "blocked"
-	case strings.Contains(lower, "connection refused") || strings.Contains(lower, "connection reset") || strings.Contains(lower, "no route to host") || strings.Contains(lower, "network is unreachable"):
+	case strings.Contains(lower, "connection refused") || strings.Contains(lower, "connection reset") || strings.Contains(lower, "no route to host") || strings.Contains(lower, "network is unreachable") || strings.Contains(lower, "err_connection_refused") || strings.Contains(lower, "err_connection_reset"):
 		return "connection_refused"
-	case strings.Contains(lower, "no such host") || strings.Contains(lower, "dns") || strings.Contains(lower, "name resolution") || strings.Contains(lower, "lookup "):
+	case strings.Contains(lower, "no such host") || strings.Contains(lower, "name resolution") || strings.Contains(lower, "server misbehaving") || strings.Contains(lower, "err_name_not_resolved"):
 		return "dns_failure"
-	case strings.Contains(lower, "browser") || strings.Contains(lower, "playwright") || strings.Contains(lower, "camoufox") || strings.Contains(lower, "websocket") || strings.Contains(lower, "chromium"):
+	case strings.Contains(lower, "browser") || strings.Contains(lower, "playwright") || strings.Contains(lower, "camoufox") || strings.Contains(lower, "chromium") || strings.Contains(lower, "navigation failed") || strings.Contains(lower, "net::err_") || strings.Contains(lower, "ns_error_"):
 		return "browser_crash"
-	case strings.Contains(lower, "parse") || strings.Contains(lower, "unmarshal") || strings.Contains(lower, "malformed") || strings.Contains(lower, "invalid"):
+	case strings.Contains(lower, "unmarshal") || strings.Contains(lower, "malformed") || strings.Contains(lower, "parse"):
 		return "parse_error"
 	default:
 		return "unknown"
