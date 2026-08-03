@@ -15,6 +15,7 @@ export function Scrape() {
   const [batchUrls, setBatchUrls] = useState('');
   const [useBrowser, setUseBrowser] = useState(false);
   const [generateJson, setGenerateJson] = useState(false);
+  const [timeout, setTimeout] = useState(30); // seconds, sync mode only (server default 30, max 120)
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<JobResponse | null>(null);
@@ -105,14 +106,21 @@ export function Scrape() {
         return;
       }
 
-      const data = { url: url.trim(), useBrowser, generateJson };
-
       if (mode === 'sync') {
-        const job = await api.scrapeSync(data);
+        const job = await api.scrapeSync({
+          url: url.trim(),
+          useBrowser,
+          generateJson,
+          timeout,
+        });
         setResult(job);
         trackJob(job);
       } else {
-        const job = await api.scrapeAsync(data);
+        const job = await api.scrapeAsync({
+          url: url.trim(),
+          useBrowser,
+          generateJson,
+        });
         setResult(job);
         trackJob(job);
         setPolling(true);
@@ -194,6 +202,19 @@ export function Scrape() {
             />
             Extract structured JSON
           </label>
+          {mode === 'sync' && (
+            <label className="flex items-center gap-2 text-sm text-zinc-300 cursor-pointer">
+              <span className="text-zinc-500">Timeout (s)</span>
+              <input
+                type="number"
+                min={1}
+                max={120}
+                value={timeout}
+                onChange={(e) => setTimeout(Math.max(1, Math.min(120, parseInt(e.target.value) || 30)))}
+                className="input w-24"
+              />
+            </label>
+          )}
         </div>
 
         <div className="flex items-center gap-3 pt-2">
@@ -205,7 +226,7 @@ export function Scrape() {
             {loading ? 'Submitting...' : polling ? 'Polling...' : mode === 'sync' ? 'Scrape (wait for result)' : mode === 'async' ? 'Submit & Poll' : 'Submit Batch'}
           </button>
           {mode === 'sync' && (
-            <span className="text-xs text-zinc-500">30s timeout</span>
+            <span className="text-xs text-zinc-500">{timeout}s timeout (max 120s)</span>
           )}
         </div>
       </form>

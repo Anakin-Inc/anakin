@@ -105,7 +105,7 @@ curl -s -X POST http://localhost:8080/v1/scrape \
   -d '{"url": "https://example.com"}' | jq .
 ```
 
-One request, full result back. No polling. Timeout: 30 seconds.
+One request, full result back. No polling. Timeout: 30 seconds by default (configurable via the `timeout` request field, max 120 seconds).
 
 **Asynchronous** (for long-running scrapes):
 
@@ -162,7 +162,7 @@ See [docs/API.md](docs/API.md) for the complete API reference. Quick overview:
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| `POST` | `/v1/scrape` | **Sync** — scrape a URL and get the result back directly (30s timeout) |
+| `POST` | `/v1/scrape` | **Sync** — scrape a URL and get the result back directly (default 30s timeout, configurable via `timeout` field, max 120s) |
 | `POST` | `/v1/url-scraper` | **Async** — submit a scrape job, returns job ID |
 | `GET` | `/v1/url-scraper/:id` | Poll for async job result |
 | `POST` | `/v1/url-scraper/batch` | Batch scrape up to 10 URLs |
@@ -180,6 +180,7 @@ See [docs/API.md](docs/API.md) for the complete API reference. Quick overview:
 | `url` | string | **required** | URL to scrape |
 | `useBrowser` | bool | `false` | Skip HTTP handler, go straight to browser |
 | `generateJson` | bool | `false` | Extract structured JSON via Gemini AI (requires `GEMINI_API_KEY`) |
+| `timeout` | int | `30` | Seconds to wait for a sync result (max `120`; sync endpoint only) |
 
 ### Response
 
