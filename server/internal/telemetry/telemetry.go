@@ -276,7 +276,14 @@ func (c *Collector) Stop() {
 }
 
 // initDB creates the telemetry_instance table and loads or generates the instance UUID.
+// Without a database (DATABASE_URL unset) the instance ID is ephemeral — a new one
+// is generated on every start, same as jobs not persisting in that mode.
 func (c *Collector) initDB(db *sql.DB) error {
+	if db == nil {
+		c.instanceID = uuid.New().String()
+		return nil
+	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
