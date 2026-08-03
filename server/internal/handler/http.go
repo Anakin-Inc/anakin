@@ -6,11 +6,13 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"time"
 
 	"github.com/Anakin-Inc/anakinscraper-oss/server/internal/models"
+	"github.com/Anakin-Inc/anakinscraper-oss/server/internal/netguard"
 )
 
 const defaultUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
@@ -22,7 +24,9 @@ type HTTPHandler struct {
 }
 
 // NewHTTPHandler creates a new HTTP handler with optional proxy support.
-func NewHTTPHandler(timeout time.Duration, proxyURL string) *HTTPHandler {
+// Unless allowPrivateTargets is set, direct connections to internal addresses are
+// refused at dial time, which also covers redirects and DNS rebinding.
+func NewHTTPHandler(timeout time.Duration, proxyURL string, allowPrivateTargets bool) *HTTPHandler {
 	transport := &http.Transport{
 		MaxIdleConns:        100,
 		MaxIdleConnsPerHost: 10,
@@ -33,6 +37,14 @@ func NewHTTPHandler(timeout time.Duration, proxyURL string) *HTTPHandler {
 		if parsed, err := url.Parse(proxyURL); err == nil {
 			transport.Proxy = http.ProxyURL(parsed)
 		}
+	} else if !allowPrivateTargets {
+		// Only guard the dialer when we dial the target ourselves. Behind a proxy the
+		// dial target is the proxy, which is commonly a private address.
+		transport.DialContext = (&net.Dialer{
+			Timeout:   30 * time.Second,
+			KeepAlive: 30 * time.Second,
+			Control:   netguard.DialControl,
+		}).DialContext
 	}
 
 	return &HTTPHandler{

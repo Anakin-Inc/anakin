@@ -16,9 +16,9 @@ import (
 )
 
 // Setup configures all routes. db may be nil when running without PostgreSQL.
-func Setup(app *fiber.App, s store.JobStore, db *sql.DB, pool *worker.Pool, proxyPool *proxy.Pool, tel *telemetry.Collector) {
+func Setup(app *fiber.App, s store.JobStore, db *sql.DB, pool *worker.Pool, proxyPool *proxy.Pool, tel *telemetry.Collector, allowPrivateTargets bool) {
 	healthHandler := handlers.NewHealthHandler(s)
-	scraperHandler := handlers.NewScraperHandler(s, pool)
+	scraperHandler := handlers.NewScraperHandler(s, pool, allowPrivateTargets)
 	proxyScoresHandler := handlers.NewProxyScoresHandler(proxyPool)
 
 	app.Get("/health", healthHandler.Health)
