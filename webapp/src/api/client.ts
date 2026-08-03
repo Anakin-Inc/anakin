@@ -10,11 +10,15 @@ import type {
 
 const BASE = '/api';
 
+// Set VITE_API_KEY when the server runs with API_KEY. Required for domain config writes.
+const API_KEY = import.meta.env.VITE_API_KEY as string | undefined;
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
     ...init,
     headers: {
       'Content-Type': 'application/json',
+      ...(API_KEY ? { 'X-API-Key': API_KEY } : {}),
       ...init?.headers,
     },
   });

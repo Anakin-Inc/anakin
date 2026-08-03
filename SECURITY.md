@@ -1,5 +1,19 @@
 # Security Policy
 
+## Trust Model
+
+**The API is not safe to expose to an untrusted network without `API_KEY` set.** A caller
+who can reach the port can submit scrape jobs and read every job result on the instance.
+
+- `API_KEY` — when set, every `/v1` route requires it (`X-API-Key`, `Api-Key`, or
+  `Authorization: Bearer <key>`). Unset means an open instance; set it before binding the
+  port to anything but localhost. Domain config writes always require it.
+- `CORS_ALLOW_ORIGINS` — which browser origins may read API responses. Defaults to the
+  webapp dev server. Setting `*` lets any website a developer visits drive the instance
+  and read the results.
+- Scrape targets reach whatever the server can route to. Treat the server's network
+  position as part of the attack surface.
+
 ## Supported Versions
 
 | Version | Supported |
