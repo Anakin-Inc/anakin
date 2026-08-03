@@ -104,6 +104,8 @@ export function Dashboard() {
             <EndpointRow method="POST" path="/v1/url-scraper/batch" desc="Batch scrape" />
             <EndpointRow method="GET" path="/v1/domain-configs" desc="List configs" />
             <EndpointRow method="GET" path="/v1/proxy/scores" desc="Proxy stats" />
+            <EndpointRow method="GET" path="/v1/telemetry/status" desc="Telemetry status" />
+            <EndpointRow method="GET" path="/health" desc="Health check" />
           </div>
         </div>
 
