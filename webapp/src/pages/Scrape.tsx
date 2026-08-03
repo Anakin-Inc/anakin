@@ -3,13 +3,15 @@ import { useSearchParams, useNavigate } from 'react-router-dom';
 import { api } from '../api/client';
 import { StatusBadge } from '../components/StatusBadge';
 import { CodeBlock } from '../components/CodeBlock';
-import type { JobResponse, TrackedJob } from '../types';
+import { useJobs } from '../hooks/useJobs';
+import type { JobResponse } from '../types';
 
 type Mode = 'sync' | 'async' | 'batch';
 
 export function Scrape() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
+  const { addJob, updateJob } = useJobs();
   const [mode, setMode] = useState<Mode>('sync');
   const [url, setUrl] = useState(searchParams.get('url') || '');
   const [batchUrls, setBatchUrls] = useState('');
@@ -42,7 +44,7 @@ export function Scrape() {
         setResult(job);
         if (job.status === 'completed' || job.status === 'failed') {
           setPolling(false);
-          updateTrackedJob(result.id, job.status);
+          updateJob(result.id, { status: job.status });
         }
       } catch {
         // keep polling
@@ -50,29 +52,7 @@ export function Scrape() {
     }, 1500);
 
     return () => clearInterval(timer);
-  }, [polling, result?.id, result?.status]);
-
-  function trackJob(job: JobResponse) {
-    const tracked: TrackedJob = {
-      id: job.id,
-      url: job.url || url,
-      type: 'single',
-      status: job.status,
-      createdAt: job.createdAt || new Date().toISOString(),
-    };
-    const jobs: TrackedJob[] = JSON.parse(localStorage.getItem('anakinscraper_jobs') || '[]');
-    jobs.unshift(tracked);
-    localStorage.setItem('anakinscraper_jobs', JSON.stringify(jobs.slice(0, 100)));
-  }
-
-  function updateTrackedJob(id: string, status: string) {
-    const jobs: TrackedJob[] = JSON.parse(localStorage.getItem('anakinscraper_jobs') || '[]');
-    const idx = jobs.findIndex((j) => j.id === id);
-    if (idx !== -1) {
-      jobs[idx].status = status as TrackedJob['status'];
-      localStorage.setItem('anakinscraper_jobs', JSON.stringify(jobs));
-    }
-  }
+  }, [polling, result?.id, result?.status, updateJob]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -91,17 +71,14 @@ export function Scrape() {
 
         const batchJob = await api.scrapeBatch({ urls, useBrowser, generateJson });
         // Track and navigate to jobs page
-        const tracked: TrackedJob = {
+        addJob({
           id: batchJob.id,
           url: urls[0],
           type: 'batch',
           status: batchJob.status,
           createdAt: batchJob.createdAt || new Date().toISOString(),
           urls,
-        };
-        const jobs: TrackedJob[] = JSON.parse(localStorage.getItem('anakinscraper_jobs') || '[]');
-        jobs.unshift(tracked);
-        localStorage.setItem('anakinscraper_jobs', JSON.stringify(jobs.slice(0, 100)));
+        });
         navigate(`/jobs/${batchJob.id}?type=batch`);
         return;
       }
@@ -114,7 +91,13 @@ export function Scrape() {
           timeout,
         });
         setResult(job);
-        trackJob(job);
+        addJob({
+          id: job.id,
+          url: job.url || url,
+          type: 'single',
+          status: job.status,
+          createdAt: job.createdAt || new Date().toISOString(),
+        });
       } else {
         const job = await api.scrapeAsync({
           url: url.trim(),
@@ -122,7 +105,13 @@ export function Scrape() {
           generateJson,
         });
         setResult(job);
-        trackJob(job);
+        addJob({
+          id: job.id,
+          url: job.url || url,
+          type: 'single',
+          status: job.status,
+          createdAt: job.createdAt || new Date().toISOString(),
+        });
         setPolling(true);
       }
     } catch (err: unknown) {
