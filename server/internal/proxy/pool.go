@@ -130,7 +130,11 @@ func (p *Pool) RecordSuccess(proxyURL, targetHost string, latencyMs int) {
 	sc.TotalRequests++
 	sc.Score = float64(sc.Alpha) / float64(sc.Alpha+sc.Beta)
 	if latencyMs > 0 {
-		sc.AvgLatencyMs = int(float64(sc.AvgLatencyMs)*(1-latencyEMA) + float64(latencyMs)*latencyEMA)
+		if sc.AvgLatencyMs == 0 {
+			sc.AvgLatencyMs = latencyMs
+		} else {
+			sc.AvgLatencyMs = int(float64(sc.AvgLatencyMs)*(1-latencyEMA) + float64(latencyMs)*latencyEMA)
+		}
 	}
 	sc.LastUpdated = time.Now()
 }
