@@ -73,6 +73,79 @@ func TestCache_GetConfig_Matching(t *testing.T) {
 	}
 }
 
+// docs/domain-configs.md promises "if multiple configs could match, higher
+// priority wins". Priority was loaded from the DB and then discarded, so the
+// nearest ancestor always won regardless of how it was set.
+func TestCache_GetConfig_Priority(t *testing.T) {
+	tests := []struct {
+		name    string
+		configs []*DomainConfig
+		url     string
+		want    string
+	}{
+		{
+			name: "higher-priority ancestor beats nearer ancestor",
+			configs: []*DomainConfig{
+				{Domain: "jobs.example.com", IsEnabled: true, MatchSubdomains: true, Priority: 0},
+				{Domain: "example.com", IsEnabled: true, MatchSubdomains: true, Priority: 10},
+			},
+			url:  "https://www.jobs.example.com/posting/1",
+			want: "example.com",
+		},
+		{
+			name: "nearer ancestor wins at equal priority",
+			configs: []*DomainConfig{
+				{Domain: "jobs.example.com", IsEnabled: true, MatchSubdomains: true, Priority: 5},
+				{Domain: "example.com", IsEnabled: true, MatchSubdomains: true, Priority: 5},
+			},
+			url:  "https://www.jobs.example.com/posting/1",
+			want: "jobs.example.com",
+		},
+		{
+			name: "higher-priority ancestor beats the exact host",
+			configs: []*DomainConfig{
+				{Domain: "www.example.com", IsEnabled: true, Priority: 1},
+				{Domain: "example.com", IsEnabled: true, MatchSubdomains: true, Priority: 99},
+			},
+			url:  "https://www.example.com/page",
+			want: "example.com",
+		},
+		{
+			name: "exact host wins at equal priority",
+			configs: []*DomainConfig{
+				{Domain: "www.example.com", IsEnabled: true, Priority: 7},
+				{Domain: "example.com", IsEnabled: true, MatchSubdomains: true, Priority: 7},
+			},
+			url:  "https://www.example.com/page",
+			want: "www.example.com",
+		},
+		{
+			name: "a higher-priority ancestor without matchSubdomains is not a candidate",
+			configs: []*DomainConfig{
+				{Domain: "jobs.example.com", IsEnabled: true, MatchSubdomains: true, Priority: 0},
+				{Domain: "example.com", IsEnabled: true, MatchSubdomains: false, Priority: 99},
+			},
+			url:  "https://www.jobs.example.com/posting/1",
+			want: "jobs.example.com",
+		},
+		{
+			name: "a higher-priority ancestor that is disabled is not a candidate",
+			configs: []*DomainConfig{
+				{Domain: "jobs.example.com", IsEnabled: true, MatchSubdomains: true, Priority: 0},
+				{Domain: "example.com", IsEnabled: false, MatchSubdomains: true, Priority: 99},
+			},
+			url:  "https://www.jobs.example.com/posting/1",
+			want: "jobs.example.com",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assertMatched(t, newTestCache(tt.configs...).GetConfig(tt.url), tt.want)
+		})
+	}
+}
+
 // A disabled config must be completely inert. It previously still blocked the
 // domain and still imposed content validation, because those branches in the
 // processor did not consult IsEnabled.
