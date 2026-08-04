@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+- **Sync scrape timeout overflow** — a `timeout` large enough to overflow int64 nanoseconds wrapped to a negative duration and slipped past the clamp, giving the request an already-expired deadline and an immediate `408` instead of the documented 120s ceiling. The clamp now compares before converting (`server/internal/http/handlers/scraper.go`)
+
+### Changed
+- **Sync timeout test now covers the shipping code** — the clamp moved into `resolveSyncTimeout`, which the tests call directly instead of re-implementing it. `internal/http/handlers` goes from 0% to 25% coverage, with new tests for the `ScrapeSync` success, failure, timeout and URL-validation paths
+
 ## v0.1.1 (2026-03-20)
 
 ### Added

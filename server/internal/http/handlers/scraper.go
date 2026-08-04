@@ -73,8 +73,32 @@ func (h *ScraperHandler) CreateJob(c *fiber.Ctx) error {
 	})
 }
 
+const (
+	syncPollInterval   = 500 * time.Millisecond
+	defaultSyncTimeout = 30 * time.Second
+	maxSyncTimeout     = 120 * time.Second
+)
+
+// resolveSyncTimeout maps the optional `timeout` request field (in seconds) to
+// how long ScrapeSync will wait for a job. Non-positive values get the default;
+// anything at or above the ceiling is clamped to it.
+//
+// The comparison is done in seconds, before converting to a Duration: a large
+// enough value overflows int64 nanoseconds and wraps negative, which would slip
+// past a post-conversion clamp and produce an already-expired deadline.
+func resolveSyncTimeout(seconds int) time.Duration {
+	if seconds <= 0 {
+		return defaultSyncTimeout
+	}
+	if seconds >= int(maxSyncTimeout/time.Second) {
+		return maxSyncTimeout
+	}
+	return time.Duration(seconds) * time.Second
+}
+
 // ScrapeSync is the synchronous endpoint: submit a job and wait for the result.
-// Polls the database every 500ms until the job completes or the 30s timeout expires.
+// Polls the store every syncPollInterval until the job reaches a terminal state
+// or the timeout resolved by resolveSyncTimeout expires.
 func (h *ScraperHandler) ScrapeSync(c *fiber.Ctx) error {
 	var req models.ScrapeRequest
 	if err := c.BodyParser(&req); err != nil {
@@ -117,21 +141,8 @@ func (h *ScraperHandler) ScrapeSync(c *fiber.Ctx) error {
 
 	// Poll store until job completes or timeout expires.
 	// Timeout is configurable via request body (default: 30s, max: 120s).
-	const (
-		pollInterval   = 500 * time.Millisecond
-		defaultTimeout = 30 * time.Second
-		maxTimeout     = 120 * time.Second
-	)
-	maxWait := defaultTimeout
-	if req.Timeout > 0 {
-		requested := time.Duration(req.Timeout) * time.Second
-		if requested > maxTimeout {
-			requested = maxTimeout
-		}
-		maxWait = requested
-	}
-	deadline := time.Now().Add(maxWait)
-	ticker := time.NewTicker(pollInterval)
+	deadline := time.Now().Add(resolveSyncTimeout(req.Timeout))
+	ticker := time.NewTicker(syncPollInterval)
 	defer ticker.Stop()
 
 	for {
