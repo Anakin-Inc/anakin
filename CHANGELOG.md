@@ -5,6 +5,10 @@
 ### Fixed
 - **Batch result ordering without a database** — `MemoryStore.GetChildJobs` returned children in Go's randomised map order, so polling a batch twice gave different orders and each result's `index` identified nothing. It now returns creation order, matching `PostgresStore` (`server/internal/store/memory.go`)
 - **Job status without a database** — `MemoryStore.CreateJob` left `status` empty while `PostgresStore` starts jobs at `pending`. No branch of `UpdateParentBatchStatus` counts an empty status, so a freshly submitted batch was reported `completed` before any child had run (`server/internal/store/memory.go`)
+- **In-memory store grows without bound** — `MemoryStore` never removed anything, and each completed job retains the page HTML, cleaned HTML and markdown, so the DB-less mode grew until the process was OOM-killed. It now evicts the oldest jobs once `MEMORY_STORE_MAX_JOBS` is exceeded (`server/internal/store/memory.go`)
+
+### Added
+- **`MEMORY_STORE_MAX_JOBS`** — bounds retention of the in-memory store used when `DATABASE_URL` is unset (default 500). Set to `0` to restore unbounded retention
 
 ## v0.1.1 (2026-03-20)
 
