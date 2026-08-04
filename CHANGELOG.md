@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+- **Scrape endpoints stall instead of shedding load** — `worker.Pool.Submit` was a bare channel send called from inside the request handlers, so once the queue filled the request goroutine parked and `POST /v1/scrape` and `POST /v1/url-scraper` stopped responding. Submit now refuses work and the handlers return `503` with `Retry-After` (`server/internal/worker/worker.go`)
+- **Panic when a request races shutdown** — `Drain` closes the job channel, so a `Submit` racing it panicked with `send on closed channel` and took down the process. A sync scrape can still be in its handler when draining starts, since its ceiling is 120s while shutdown waits 30s. Submit now returns an error once draining has begun, and `Drain` is idempotent (`server/internal/worker/worker.go`)
+
 ## v0.1.1 (2026-03-20)
 
 ### Added
