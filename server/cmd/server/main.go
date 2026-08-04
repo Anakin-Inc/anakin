@@ -112,7 +112,7 @@ func main() {
 
 	// Telemetry (anonymous usage data)
 	tel := telemetry.New(db, cfg.TelemetryEnabled, cfg.TelemetryURL,
-		cfg.GeminiAPIKey != "", len(cfg.ProxyURLs))
+		cfg.GeminiAPIKey != "", len(cfg.ProxyURLs), cfg.TelemetryVerbose)
 
 	// Create processor and worker pool
 	proc := processor.NewProcessor(jobStore, chain, domainCache, proxyPool, geminiClient, tel)
@@ -153,7 +153,11 @@ func main() {
 	fmt.Println("  Docs:    https://github.com/Anakin-Inc/anakinscraper-oss")
 	fmt.Println("  Hosted:  https://anakin.io (geo-proxies, caching, search, research)")
 	if cfg.TelemetryEnabled {
-		fmt.Println("  Telemetry: anonymous usage data enabled (disable: TELEMETRY=off)")
+		if cfg.TelemetryVerbose {
+			fmt.Println("  Telemetry: verbose audit logging enabled (disable: TELEMETRY=off)")
+		} else {
+			fmt.Println("  Telemetry: anonymous usage data enabled (disable: TELEMETRY=off)")
+		}
 	}
 	fmt.Println("")
 

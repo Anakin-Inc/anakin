@@ -96,6 +96,9 @@ func TestLoad(t *testing.T) {
 		if !cfg.TelemetryEnabled {
 			t.Error("expected TelemetryEnabled=true by default")
 		}
+		if cfg.TelemetryVerbose {
+			t.Error("expected TelemetryVerbose=false by default")
+		}
 		if cfg.TelemetryURL != "" {
 			t.Errorf("expected empty TelemetryURL by default, got: %q", cfg.TelemetryURL)
 		}
@@ -243,6 +246,9 @@ func TestLoad(t *testing.T) {
 		if cfg.TelemetryEnabled {
 			t.Error("expected TelemetryEnabled=false when TELEMETRY=off")
 		}
+		if cfg.TelemetryVerbose {
+			t.Error("expected TelemetryVerbose=false when TELEMETRY=off")
+		}
 	})
 
 	t.Run("TELEMETRY=false disables telemetry", func(t *testing.T) {
@@ -256,6 +262,26 @@ func TestLoad(t *testing.T) {
 		}
 		if cfg.TelemetryEnabled {
 			t.Error("expected TelemetryEnabled=false when TELEMETRY=false")
+		}
+		if cfg.TelemetryVerbose {
+			t.Error("expected TelemetryVerbose=false when TELEMETRY=false")
+		}
+	})
+
+	t.Run("TELEMETRY=verbose enables telemetry audit logging", func(t *testing.T) {
+		clearConfigEnvVars(t)
+		t.Setenv("DATABASE_URL", "postgres://localhost/test")
+		t.Setenv("TELEMETRY", "verbose")
+
+		cfg, err := Load()
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !cfg.TelemetryEnabled {
+			t.Error("expected TelemetryEnabled=true when TELEMETRY=verbose")
+		}
+		if !cfg.TelemetryVerbose {
+			t.Error("expected TelemetryVerbose=true when TELEMETRY=verbose")
 		}
 	})
 

@@ -270,7 +270,7 @@ All configuration via environment variables:
 | `GEMINI_API_KEY` | — | Google Gemini API key for structured JSON extraction ([get one free](https://aistudio.google.com/apikey)) |
 | `ANAKIN_API_KEY` | — | [anakin.io](https://anakin.io) API key — enables hosted API as chain fallback for hard-to-scrape sites |
 | `LOG_LEVEL` | `INFO` | Log level (DEBUG, INFO, WARN, ERROR) |
-| `TELEMETRY` | `on` | Anonymous usage telemetry (`off` to disable — see [TELEMETRY.md](TELEMETRY.md)) |
+| `TELEMETRY` | `on` | Anonymous usage telemetry (`off` to disable, `verbose` to log payloads at debug level — see [TELEMETRY.md](TELEMETRY.md)) |
 | `TELEMETRY_URL` | — | Custom telemetry endpoint (defaults to `https://telemetry.anakin.io/v1/collect`) |
 | `DISABLE_HOSTED_HINTS` | — | Set to `true` to suppress hosted service tips in error messages |
 

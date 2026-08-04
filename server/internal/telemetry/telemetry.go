@@ -64,6 +64,7 @@ type Event struct {
 // All public methods are safe to call on a nil or disabled Collector.
 type Collector struct {
 	enabled     bool
+	verbose     bool
 	instanceID  string
 	endpointURL string
 	startedAt   time.Time
@@ -150,9 +151,10 @@ type StatusResponse struct {
 
 // New creates a Collector. If enabled is false, returns a disabled (noop) collector.
 // The db connection is used to persist the instance UUID across restarts.
-func New(db *sql.DB, enabled bool, endpointURL string, geminiEnabled bool, proxyPoolSize int) *Collector {
+func New(db *sql.DB, enabled bool, endpointURL string, geminiEnabled bool, proxyPoolSize int, verbose bool) *Collector {
 	c := &Collector{
 		enabled:       enabled,
+		verbose:       verbose,
 		startedAt:     time.Now(),
 		geminiEnabled: geminiEnabled,
 		proxyPoolSize: proxyPoolSize,
@@ -182,6 +184,7 @@ func New(db *sql.DB, enabled bool, endpointURL string, geminiEnabled bool, proxy
 	slog.Info("telemetry enabled",
 		"instance_id", c.instanceID,
 		"endpoint", c.endpointURL,
+		"verbose", c.verbose,
 	)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -398,6 +401,9 @@ func (c *Collector) trySend() {
 	if err != nil {
 		slog.Error("telemetry: failed to marshal payload", "error", err, "event_count", total)
 		return
+	}
+	if c.verbose {
+		slog.Debug("telemetry: payload", "event_count", total, "payload", string(data))
 	}
 
 	for attempt := 0; attempt <= maxRetries; attempt++ {

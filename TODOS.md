@@ -44,17 +44,6 @@
 **Effort:** S (human: ~3 hours / CC: ~15 min)
 **Depends on:** Nothing
 
-## P3: Telemetry — verbose audit mode
-
-**What:** Add `TELEMETRY=verbose` that logs the full JSON payload to stdout (via `slog.Debug`) before each HTTP send. Power users can audit exactly what leaves their machine.
-
-**Why:** Maximum transparency for security-conscious admins who want to verify telemetry claims without reading source code.
-
-**How to apply:** In `trySend()`, check if verbose mode is enabled. If so, log the marshaled payload at DEBUG level before sending.
-
-**Effort:** S (human: ~2 hours / CC: ~5 min)
-**Depends on:** Nothing
-
 ## P3: Telemetry — first-boot dry-run
 
 **What:** On the first telemetry cycle after installation, log the payload but don't send it. Print: "Telemetry dry-run complete — see /v1/telemetry/status. Next cycle sends for real. Disable: TELEMETRY=off".
