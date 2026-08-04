@@ -1,23 +1,22 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { StatusBadge } from '../components/StatusBadge';
 import { api } from '../api/client';
 import type { TrackedJob } from '../types';
 
 export function Jobs() {
-  const [jobs, setJobs] = useState<TrackedJob[]>([]);
-  const [filter, setFilter] = useState<string>('all');
-
-  const loadJobs = useCallback(() => {
+  const [jobs, setJobs] = useState<TrackedJob[]>(() => {
     const raw = localStorage.getItem('anakinscraper_jobs');
-    if (raw) {
-      setJobs(JSON.parse(raw));
-    }
-  }, []);
+    if (!raw) return [];
 
-  useEffect(() => {
-    loadJobs();
-  }, [loadJobs]);
+    try {
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  });
+  const [filter, setFilter] = useState<string>('all');
 
   // Refresh active job statuses
   useEffect(() => {
