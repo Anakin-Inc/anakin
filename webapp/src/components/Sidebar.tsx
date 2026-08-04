@@ -41,7 +41,7 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
               }`
             }
           >
-            <link.icon active={false} />
+            <link.icon />
             {link.label}
           </NavLink>
         ))}
@@ -64,7 +64,7 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   );
 }
 
-function DashboardIcon({ active: _ }: { active: boolean }) {
+function DashboardIcon() {
   return (
     <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.5">
       <rect x="2" y="2" width="5.5" height="5.5" rx="1" />
@@ -75,7 +75,7 @@ function DashboardIcon({ active: _ }: { active: boolean }) {
   );
 }
 
-function ScrapeIcon({ active: _ }: { active: boolean }) {
+function ScrapeIcon() {
   return (
     <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.5">
       <circle cx="9" cy="9" r="7" />
@@ -84,7 +84,7 @@ function ScrapeIcon({ active: _ }: { active: boolean }) {
   );
 }
 
-function JobsIcon({ active: _ }: { active: boolean }) {
+function JobsIcon() {
   return (
     <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.5">
       <path d="M3 5h12M3 9h12M3 13h8" />
@@ -92,7 +92,7 @@ function JobsIcon({ active: _ }: { active: boolean }) {
   );
 }
 
-function DomainsIcon({ active: _ }: { active: boolean }) {
+function DomainsIcon() {
   return (
     <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.5">
       <circle cx="9" cy="9" r="7" />
@@ -102,7 +102,7 @@ function DomainsIcon({ active: _ }: { active: boolean }) {
   );
 }
 
-function ProxiesIcon({ active: _ }: { active: boolean }) {
+function ProxiesIcon() {
   return (
     <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.5">
       <path d="M2 14l3-4 3 2 4-5 4 3" />
