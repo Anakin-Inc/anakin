@@ -3,9 +3,12 @@
 package telemetry
 
 import (
+	"bytes"
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -311,6 +314,70 @@ func TestTrySend_SkipsEmptyPayload(t *testing.T) {
 
 	if called.Load() {
 		t.Error("expected no HTTP call for empty payload")
+	}
+}
+
+func TestTrySend_VerboseLogsPayload(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	var logs bytes.Buffer
+	previous := slog.Default()
+	slog.SetDefault(slog.New(slog.NewJSONHandler(&logs, &slog.HandlerOptions{Level: slog.LevelDebug})))
+	t.Cleanup(func() {
+		slog.SetDefault(previous)
+	})
+
+	c := &Collector{
+		enabled:     true,
+		verbose:     true,
+		instanceID:  "test-uuid",
+		endpointURL: server.URL,
+		startedAt:   time.Now(),
+		client:      server.Client(),
+	}
+	c.scrapeSync.Store(1)
+
+	c.trySend()
+
+	output := logs.String()
+	if !strings.Contains(output, "telemetry: payload") {
+		t.Fatalf("expected verbose payload log, got %q", output)
+	}
+	if !strings.Contains(output, "test-uuid") {
+		t.Errorf("expected payload log to include instance ID, got %q", output)
+	}
+}
+
+func TestTrySend_NonVerboseDoesNotLogPayload(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	var logs bytes.Buffer
+	previous := slog.Default()
+	slog.SetDefault(slog.New(slog.NewJSONHandler(&logs, &slog.HandlerOptions{Level: slog.LevelDebug})))
+	t.Cleanup(func() {
+		slog.SetDefault(previous)
+	})
+
+	c := &Collector{
+		enabled:     true,
+		instanceID:  "test-uuid",
+		endpointURL: server.URL,
+		startedAt:   time.Now(),
+		client:      server.Client(),
+	}
+	c.scrapeSync.Store(1)
+
+	c.trySend()
+
+	output := logs.String()
+	if strings.Contains(output, "telemetry: payload") {
+		t.Fatalf("expected no verbose payload log, got %q", output)
 	}
 }
 

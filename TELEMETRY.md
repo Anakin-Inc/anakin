@@ -18,6 +18,17 @@ TELEMETRY=off
 
 When disabled, no data is collected or sent. The server logs `telemetry disabled` on startup.
 
+## Verbose audit mode
+
+Set `TELEMETRY` to `verbose` to log the full JSON payload at debug level before each telemetry send:
+
+```bash
+TELEMETRY=verbose
+LOG_LEVEL=DEBUG
+```
+
+Verbose mode keeps telemetry enabled. It is useful when you want a local audit trail of the exact payload that leaves the server while still allowing the hourly send.
+
 ## What is collected
 
 Every hour, the server sends a single HTTP POST to `https://telemetry.anakin.io/v1/collect` containing:

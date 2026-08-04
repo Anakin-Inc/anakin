@@ -39,6 +39,7 @@ type Config struct {
 
 	// Telemetry (anonymous usage data — opt-out via TELEMETRY=off)
 	TelemetryEnabled bool
+	TelemetryVerbose bool
 	TelemetryURL     string
 
 	// Logging
@@ -47,6 +48,8 @@ type Config struct {
 
 // Load reads configuration from environment variables.
 func Load() (*Config, error) {
+	telemetryEnabled, telemetryVerbose := getTelemetryEnv("TELEMETRY", true)
+
 	cfg := &Config{
 		Port:             getEnvOrDefault("PORT", "8080"),
 		DatabaseURL:      os.Getenv("DATABASE_URL"),
@@ -61,7 +64,8 @@ func Load() (*Config, error) {
 		ProxyURLs:        getStringSliceEnv("PROXY_URLS"),
 		GeminiAPIKey:     os.Getenv("GEMINI_API_KEY"),
 		AnakinAPIKey:     os.Getenv("ANAKIN_API_KEY"),
-		TelemetryEnabled: getBoolEnvDefault("TELEMETRY", true),
+		TelemetryEnabled: telemetryEnabled,
+		TelemetryVerbose: telemetryVerbose,
 		TelemetryURL:     os.Getenv("TELEMETRY_URL"),
 		LogLevel:         getEnvOrDefault("LOG_LEVEL", "INFO"),
 	}
@@ -111,6 +115,17 @@ func getBoolEnvDefault(key string, defaultValue bool) bool {
 	default:
 		return true
 	}
+}
+
+func getTelemetryEnv(key string, defaultEnabled bool) (enabled bool, verbose bool) {
+	v := strings.ToLower(strings.TrimSpace(os.Getenv(key)))
+	if v == "verbose" {
+		return true, true
+	}
+	if v == "" {
+		return defaultEnabled, false
+	}
+	return getBoolEnvDefault(key, defaultEnabled), false
 }
 
 func getDurationEnv(key string, defaultValue time.Duration) time.Duration {
