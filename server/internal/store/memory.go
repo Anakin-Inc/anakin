@@ -41,6 +41,11 @@ func (m *MemoryStore) CreateJob(_ context.Context, job JobRecord) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	j := job // copy
+	// PostgresStore's INSERT hardcodes 'pending' and ignores the caller's value
+	// (postgres.go), so a new job starts pending in both backends. Without this
+	// the status stayed "", which no branch of UpdateParentBatchStatus counts —
+	// a fresh batch was reported completed before any child had run.
+	j.Status = "pending"
 	j.CreatedAt = time.Now().UTC()
 	m.seq++
 	m.jobs[job.ID] = &memJob{rec: j, seq: m.seq}

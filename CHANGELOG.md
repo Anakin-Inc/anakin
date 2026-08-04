@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+- **Batch result ordering without a database** — `MemoryStore.GetChildJobs` returned children in Go's randomised map order, so polling a batch twice gave different orders and each result's `index` identified nothing. It now returns creation order, matching `PostgresStore` (`server/internal/store/memory.go`)
+- **Job status without a database** — `MemoryStore.CreateJob` left `status` empty while `PostgresStore` starts jobs at `pending`. No branch of `UpdateParentBatchStatus` counts an empty status, so a freshly submitted batch was reported `completed` before any child had run (`server/internal/store/memory.go`)
+
 ## v0.1.1 (2026-03-20)
 
 ### Added
