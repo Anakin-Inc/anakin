@@ -60,19 +60,39 @@ func (c *Cache) refresh() {
 		return
 	}
 
-	m := make(map[string]*DomainConfig, len(configs))
-	for _, cfg := range configs {
-		m[cfg.Domain] = cfg
-	}
+	m, skipped := activeConfigs(configs)
 
 	c.mu.Lock()
 	c.configs = m
 	c.mu.Unlock()
-	slog.Debug("domain configs refreshed", "count", len(configs))
+	slog.Debug("domain configs refreshed", "active", len(m), "disabled", skipped)
 }
 
-// GetConfig returns the domain config for the given URL, or nil if none matches.
-// Tries exact domain match first, then parent domains (if matchSubdomains is enabled).
+// activeConfigs indexes configs by domain, dropping disabled ones, and reports
+// how many were dropped.
+//
+// Filtering here rather than at lookup time keeps a single place that decides
+// whether a config applies. A disabled config must be completely inert — it
+// must not block a domain or impose content validation — and it must not shadow
+// a parent domain's config during the subdomain walk in GetConfig.
+func activeConfigs(configs []*DomainConfig) (map[string]*DomainConfig, int) {
+	m := make(map[string]*DomainConfig, len(configs))
+	skipped := 0
+	for _, cfg := range configs {
+		if !cfg.IsEnabled {
+			skipped++
+			continue
+		}
+		m[cfg.Domain] = cfg
+	}
+	return m, skipped
+}
+
+// GetConfig returns the domain config that applies to the given URL, or nil if
+// none does. Tries exact domain match first, then parent domains (if
+// matchSubdomains is enabled).
+//
+// Only enabled configs are considered; disabled ones are not held by the cache.
 func (c *Cache) GetConfig(rawURL string) *DomainConfig {
 	host := ExtractHost(rawURL)
 	if host == "" {

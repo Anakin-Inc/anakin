@@ -97,8 +97,10 @@ func (p *Processor) processScrapeJob(ctx context.Context, msg models.JobMessage,
 	// Build handler request
 	req := p.buildHandlerRequest(msg, msg.URL)
 
-	// Apply domain config to request
-	if domainCfg != nil && domainCfg.IsEnabled {
+	// Apply domain config to request. The cache only holds enabled configs, so
+	// reaching here at all means this one applies — no IsEnabled check needed,
+	// and none of the other config-driven branches need one either.
+	if domainCfg != nil {
 		if len(domainCfg.HandlerChain) > 0 {
 			req.AllowedHandlers = domainCfg.HandlerChain
 		}
