@@ -266,7 +266,10 @@ func (p *Processor) buildHandlerRequest(msg models.JobMessage, targetURL string)
 		URL:        targetURL,
 		Country:    msg.Country,
 		UseBrowser: msg.UseBrowser,
-		Timeout:    60 * time.Second,
+		// Timeout is left zero: no per-attempt override unless a domain config
+		// sets requestTimeoutMs. The previous hardcoded 60s was never read by
+		// anything, so populating it here would have silently capped every
+		// attempt once the chain started honouring the field.
 	}
 }
 
