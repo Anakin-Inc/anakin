@@ -2,6 +2,10 @@ import { useState, useEffect } from 'react';
 import { api } from '../api/client';
 import type { DomainConfig } from '../types';
 
+// Handlers the backend can try in a chain (order matters). 'anakin' is the
+// anakin.io API fallback, enabled only when ANAKIN_API_KEY is set on the server.
+const AVAILABLE_HANDLERS = ['http', 'browser', 'anakin'];
+
 type FormData = {
   domain: string;
   isEnabled: boolean;
@@ -407,7 +411,7 @@ export function DomainConfigs() {
                     </div>
                   ))}
                   <div className="flex gap-2 mt-1">
-                    {['http', 'browser'].filter(h => !form.handlerChain.includes(h)).map(h => (
+                    {AVAILABLE_HANDLERS.filter(h => !form.handlerChain.includes(h)).map(h => (
                       <button
                         key={h}
                         type="button"
