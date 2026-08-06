@@ -10,6 +10,7 @@ export interface ScrapeRequest {
   forceFresh?: boolean;
   useBrowser?: boolean;
   generateJson?: boolean;
+  timeout?: number; // seconds, sync scrape only (default 30, max 120)
 }
 
 export interface BatchScrapeRequest {
