@@ -4,7 +4,25 @@ Base URL: `http://localhost:8080`
 
 ## Authentication
 
-None. AnakinScraper OSS is designed for self-hosting and does not require authentication. All endpoints are open.
+Optional, off by default. Set `API_KEY` on the server and every `/v1` route requires it:
+
+```bash
+curl -X POST http://localhost:8080/v1/scrape \
+  -H "X-API-Key: $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"url": "https://example.com"}'
+```
+
+The key is accepted as `X-API-Key`, `Api-Key`, or `Authorization: Bearer <key>`. Requests
+without it get `401 unauthorized`. `GET /health` is always open so container probes work.
+
+With `API_KEY` unset the instance is open, and **domain config writes
+(`POST`/`PUT`/`DELETE /v1/domain-configs`) are disabled** — they change how every future
+scrape is routed, so they always require a key.
+
+Browsers are additionally limited by `CORS_ALLOW_ORIGINS` (default
+`http://localhost:3000`, the webapp dev server). Only listed origins can read API
+responses from a web page.
 
 ## Rate Limiting
 
