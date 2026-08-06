@@ -259,6 +259,7 @@ All configuration via environment variables:
 |----------|---------|-------------|
 | `PORT` | `8080` | Server port |
 | `DATABASE_URL` | — | PostgreSQL connection string (optional — uses in-memory storage when not set) |
+| `MEMORY_STORE_MAX_JOBS` | `500` | Jobs retained by the in-memory store before the oldest are evicted (only used when `DATABASE_URL` is unset; `0` disables eviction) |
 | `BROWSER_WS_URL` | `ws://localhost:9222/camoufox` | Browser service WebSocket URL |
 | `BROWSER_TIMEOUT` | `60` | Page navigation timeout (seconds) |
 | `BROWSER_LOAD_WAIT` | `2` | Extra wait after page load (seconds) |

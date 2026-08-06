@@ -7,6 +7,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/Anakin-Inc/anakinscraper-oss/server/internal/store"
 )
 
 // Config holds all configuration for the server.
@@ -15,6 +17,10 @@ type Config struct {
 
 	// Database
 	DatabaseURL string
+
+	// MemoryStoreMaxJobs bounds retention of the in-memory store used when
+	// DATABASE_URL is unset. Zero or less disables eviction.
+	MemoryStoreMaxJobs int
 
 	// Browser (Playwright WebSocket)
 	BrowserWSURL    string
@@ -48,22 +54,23 @@ type Config struct {
 // Load reads configuration from environment variables.
 func Load() (*Config, error) {
 	cfg := &Config{
-		Port:             getEnvOrDefault("PORT", "8080"),
-		DatabaseURL:      os.Getenv("DATABASE_URL"),
-		BrowserWSURL:     getEnvOrDefault("BROWSER_WS_URL", "ws://localhost:9222/camoufox"),
-		BrowserTimeout:   getDurationEnv("BROWSER_TIMEOUT", 60*time.Second),
-		BrowserLoadWait:  getDurationEnv("BROWSER_LOAD_WAIT", 2*time.Second),
-		JobTimeout:       getDurationEnv("JOB_TIMEOUT", 120*time.Second),
-		MaxJobRetries:    getIntEnv("MAX_JOB_RETRIES", 3),
-		WorkerPoolSize:   getIntEnv("WORKER_POOL_SIZE", 5),
-		JobBufferSize:    getIntEnv("JOB_BUFFER_SIZE", 100),
-		ProxyURL:         os.Getenv("PROXY_URL"),
-		ProxyURLs:        getStringSliceEnv("PROXY_URLS"),
-		GeminiAPIKey:     os.Getenv("GEMINI_API_KEY"),
-		AnakinAPIKey:     os.Getenv("ANAKIN_API_KEY"),
-		TelemetryEnabled: getBoolEnvDefault("TELEMETRY", true),
-		TelemetryURL:     os.Getenv("TELEMETRY_URL"),
-		LogLevel:         getEnvOrDefault("LOG_LEVEL", "INFO"),
+		Port:               getEnvOrDefault("PORT", "8080"),
+		DatabaseURL:        os.Getenv("DATABASE_URL"),
+		MemoryStoreMaxJobs: getIntEnv("MEMORY_STORE_MAX_JOBS", store.DefaultMaxJobs),
+		BrowserWSURL:       getEnvOrDefault("BROWSER_WS_URL", "ws://localhost:9222/camoufox"),
+		BrowserTimeout:     getDurationEnv("BROWSER_TIMEOUT", 60*time.Second),
+		BrowserLoadWait:    getDurationEnv("BROWSER_LOAD_WAIT", 2*time.Second),
+		JobTimeout:         getDurationEnv("JOB_TIMEOUT", 120*time.Second),
+		MaxJobRetries:      getIntEnv("MAX_JOB_RETRIES", 3),
+		WorkerPoolSize:     getIntEnv("WORKER_POOL_SIZE", 5),
+		JobBufferSize:      getIntEnv("JOB_BUFFER_SIZE", 100),
+		ProxyURL:           os.Getenv("PROXY_URL"),
+		ProxyURLs:          getStringSliceEnv("PROXY_URLS"),
+		GeminiAPIKey:       os.Getenv("GEMINI_API_KEY"),
+		AnakinAPIKey:       os.Getenv("ANAKIN_API_KEY"),
+		TelemetryEnabled:   getBoolEnvDefault("TELEMETRY", true),
+		TelemetryURL:       os.Getenv("TELEMETRY_URL"),
+		LogLevel:           getEnvOrDefault("LOG_LEVEL", "INFO"),
 	}
 
 	return cfg, nil

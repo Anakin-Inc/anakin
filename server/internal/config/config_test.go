@@ -4,6 +4,8 @@ import (
 	"os"
 	"testing"
 	"time"
+
+	"github.com/Anakin-Inc/anakinscraper-oss/server/internal/store"
 )
 
 // clearConfigEnvVars unsets all env vars that Load() reads, to ensure test isolation.
@@ -14,6 +16,7 @@ func clearConfigEnvVars(t *testing.T) {
 		"BROWSER_LOAD_WAIT", "JOB_TIMEOUT", "MAX_JOB_RETRIES",
 		"WORKER_POOL_SIZE", "JOB_BUFFER_SIZE", "PROXY_URL", "PROXY_URLS",
 		"GEMINI_API_KEY", "TELEMETRY", "TELEMETRY_URL", "LOG_LEVEL",
+		"MEMORY_STORE_MAX_JOBS",
 	}
 	for _, v := range vars {
 		t.Setenv(v, "")
@@ -32,6 +35,41 @@ func TestLoad(t *testing.T) {
 		}
 		if cfg.DatabaseURL != "postgres://user:pass@localhost:5432/testdb" {
 			t.Errorf("expected DatabaseURL to match, got: %q", cfg.DatabaseURL)
+		}
+	})
+
+	t.Run("MEMORY_STORE_MAX_JOBS defaults to the store's bound", func(t *testing.T) {
+		clearConfigEnvVars(t)
+
+		cfg, err := Load()
+		if err != nil {
+			t.Fatalf("expected no error, got: %v", err)
+		}
+		if cfg.MemoryStoreMaxJobs != store.DefaultMaxJobs {
+			t.Errorf("expected MemoryStoreMaxJobs to default to %d, got: %d",
+				store.DefaultMaxJobs, cfg.MemoryStoreMaxJobs)
+		}
+	})
+
+	t.Run("MEMORY_STORE_MAX_JOBS is overridable, including 0 for unbounded", func(t *testing.T) {
+		clearConfigEnvVars(t)
+		t.Setenv("MEMORY_STORE_MAX_JOBS", "25")
+
+		cfg, err := Load()
+		if err != nil {
+			t.Fatalf("expected no error, got: %v", err)
+		}
+		if cfg.MemoryStoreMaxJobs != 25 {
+			t.Errorf("expected MemoryStoreMaxJobs 25, got: %d", cfg.MemoryStoreMaxJobs)
+		}
+
+		t.Setenv("MEMORY_STORE_MAX_JOBS", "0")
+		cfg, err = Load()
+		if err != nil {
+			t.Fatalf("expected no error, got: %v", err)
+		}
+		if cfg.MemoryStoreMaxJobs != 0 {
+			t.Errorf("expected MemoryStoreMaxJobs 0 (eviction disabled), got: %d", cfg.MemoryStoreMaxJobs)
 		}
 	})
 
