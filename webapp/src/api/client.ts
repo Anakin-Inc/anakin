@@ -11,6 +11,7 @@ import type {
 const BASE = '/api';
 
 // Set VITE_API_KEY when the server runs with API_KEY. Required for domain config writes.
+// WARNING: `vite build` inlines this into the public JS bundle — localhost dev only. On a deployed dashboard anyone can read the server's API_KEY via view-source.
 const API_KEY = import.meta.env.VITE_API_KEY as string | undefined;
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
