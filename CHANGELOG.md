@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+- **Data race in the proxy pool** — `SelectProxy`, `Scores` and `persistScores` handed out live `*Score` pointers and read their fields after releasing the mutex, racing the writes in `RecordSuccess`/`RecordFailure`. `SelectProxy` also iterated the live score map, which `getOrCreateScore` can insert into concurrently. All three now copy under the read lock (`server/internal/proxy/pool.go`)
+
 ## v0.1.1 (2026-03-20)
 
 ### Added

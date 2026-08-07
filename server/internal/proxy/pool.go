@@ -75,38 +75,7 @@ func (p *Pool) SelectProxy(targetHost string) string {
 		return ""
 	}
 
-	p.mu.RLock()
-	hostScores := p.scores[targetHost]
-	hostBlocked := p.blocked[targetHost]
-	p.mu.RUnlock()
-
-	now := time.Now()
-	candidates := make([]*Score, 0, len(p.proxies))
-
-	for _, proxyURL := range p.proxies {
-		// Skip blocked proxies
-		if hostBlocked != nil {
-			if expiry, ok := hostBlocked[proxyURL]; ok && now.Before(expiry) {
-				continue
-			}
-		}
-
-		if hostScores != nil {
-			if sc, ok := hostScores[proxyURL]; ok {
-				candidates = append(candidates, sc)
-				continue
-			}
-		}
-
-		// New proxy: use default priors (uniform belief)
-		candidates = append(candidates, &Score{
-			ProxyURL:   proxyURL,
-			TargetHost: targetHost,
-			Alpha:      1,
-			Beta:       1,
-			Score:      0.5,
-		})
-	}
+	candidates := p.candidateScores(targetHost)
 
 	if len(candidates) == 0 {
 		// All blocked — return a random proxy as fallback
@@ -118,6 +87,48 @@ func (p *Pool) SelectProxy(targetHost string) string {
 		return p.proxies[0]
 	}
 	return best.ProxyURL
+}
+
+// candidateScores returns snapshot copies of the scores for every proxy still
+// eligible for targetHost.
+//
+// Everything that touches shared state — the score map, the blocked map, and
+// the Score fields themselves — happens under the read lock, so the caller can
+// read the results without further synchronisation while RecordSuccess and
+// RecordFailure keep mutating the originals. Handing out the live pointers
+// instead raced the sampler's Alpha/Beta reads against those writes, and
+// iterating the live inner map raced getOrCreateScore's inserts.
+func (p *Pool) candidateScores(targetHost string) []*Score {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+
+	hostScores := p.scores[targetHost]
+	hostBlocked := p.blocked[targetHost]
+	now := time.Now()
+
+	candidates := make([]*Score, 0, len(p.proxies))
+	for _, proxyURL := range p.proxies {
+		// Skip blocked proxies
+		if expiry, ok := hostBlocked[proxyURL]; ok && now.Before(expiry) {
+			continue
+		}
+
+		if sc, ok := hostScores[proxyURL]; ok {
+			snapshot := *sc
+			candidates = append(candidates, &snapshot)
+			continue
+		}
+
+		// New proxy: use default priors (uniform belief)
+		candidates = append(candidates, &Score{
+			ProxyURL:   proxyURL,
+			TargetHost: targetHost,
+			Alpha:      1,
+			Beta:       1,
+			Score:      0.5,
+		})
+	}
+	return candidates
 }
 
 // RecordSuccess updates the proxy score after a successful scrape.
@@ -156,16 +167,24 @@ func (p *Pool) RecordFailure(proxyURL, targetHost string, isBlocked bool) {
 	sc.LastUpdated = time.Now()
 }
 
-// Scores returns all current proxy scores grouped by target host.
+// Scores returns a snapshot of all current proxy scores grouped by target host.
+//
+// The returned Scores are copies: mutating them does not affect pool state, and
+// they do not observe subsequent updates. This matters because the caller — the
+// /v1/proxy/scores handler — serialises every field well after this returns,
+// including the multi-word LastUpdated, which a concurrent write could tear.
 func (p *Pool) Scores() map[string][]*Score {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 
-	result := make(map[string][]*Score)
+	result := make(map[string][]*Score, len(p.scores))
 	for host, scores := range p.scores {
+		list := make([]*Score, 0, len(scores))
 		for _, sc := range scores {
-			result[host] = append(result[host], sc)
+			snapshot := *sc
+			list = append(list, &snapshot)
 		}
+		result[host] = list
 	}
 	return result
 }
@@ -250,11 +269,15 @@ func (p *Pool) persistScores() {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
+	// Copy under the lock: the loop below reads every field to build the INSERT,
+	// and it runs long enough (a DB round trip per score) that holding live
+	// pointers would race every concurrent RecordSuccess/RecordFailure — and
+	// persist the torn values.
 	p.mu.RLock()
-	var allScores []*Score
+	allScores := make([]Score, 0, len(p.scores))
 	for _, hostScores := range p.scores {
 		for _, sc := range hostScores {
-			allScores = append(allScores, sc)
+			allScores = append(allScores, *sc)
 		}
 	}
 	p.mu.RUnlock()
