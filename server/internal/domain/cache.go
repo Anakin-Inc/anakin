@@ -60,19 +60,44 @@ func (c *Cache) refresh() {
 		return
 	}
 
-	m := make(map[string]*DomainConfig, len(configs))
-	for _, cfg := range configs {
-		m[cfg.Domain] = cfg
-	}
+	m, skipped := activeConfigs(configs)
 
 	c.mu.Lock()
 	c.configs = m
 	c.mu.Unlock()
-	slog.Debug("domain configs refreshed", "count", len(configs))
+	slog.Debug("domain configs refreshed", "active", len(m), "disabled", skipped)
 }
 
-// GetConfig returns the domain config for the given URL, or nil if none matches.
-// Tries exact domain match first, then parent domains (if matchSubdomains is enabled).
+// activeConfigs indexes configs by domain, dropping disabled ones, and reports
+// how many were dropped.
+//
+// Filtering here rather than at lookup time keeps a single place that decides
+// whether a config applies. A disabled config must be completely inert — it
+// must not block a domain or impose content validation — and it must not shadow
+// a parent domain's config during the subdomain walk in GetConfig.
+func activeConfigs(configs []*DomainConfig) (map[string]*DomainConfig, int) {
+	m := make(map[string]*DomainConfig, len(configs))
+	skipped := 0
+	for _, cfg := range configs {
+		if !cfg.IsEnabled {
+			skipped++
+			continue
+		}
+		m[cfg.Domain] = cfg
+	}
+	return m, skipped
+}
+
+// GetConfig returns the domain config that applies to the given URL, or nil if
+// none does.
+//
+// Candidates are the exact host plus every ancestor domain that opts into
+// subdomain matching. The highest Priority among them wins; ties are broken by
+// specificity, so the exact host beats an ancestor and a nearer ancestor beats
+// a more distant one. With priorities left at their default of 0 this reduces
+// to the previous behaviour — most specific match wins.
+//
+// Only enabled configs are considered; disabled ones are not held by the cache.
 func (c *Cache) GetConfig(rawURL string) *DomainConfig {
 	host := ExtractHost(rawURL)
 	if host == "" {
@@ -82,21 +107,24 @@ func (c *Cache) GetConfig(rawURL string) *DomainConfig {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
-	// Exact match
-	if cfg, ok := c.configs[host]; ok {
-		return cfg
-	}
+	// Exact match is the most specific candidate, so it seeds the comparison and
+	// is only displaced by an ancestor with strictly higher priority.
+	best := c.configs[host]
 
-	// Subdomain matching: for "www.shoes.amazon.com" try "shoes.amazon.com", "amazon.com"
+	// Subdomain matching: for "www.shoes.amazon.com" try "shoes.amazon.com", "amazon.com".
+	// Nearest ancestor first, so equal priorities keep the more specific match.
 	parts := strings.Split(host, ".")
 	for i := 1; i < len(parts)-1; i++ {
 		parent := strings.Join(parts[i:], ".")
-		if cfg, ok := c.configs[parent]; ok && cfg.MatchSubdomains {
-			return cfg
+		cfg, ok := c.configs[parent]
+		if !ok || !cfg.MatchSubdomains {
+			continue
+		}
+		if best == nil || cfg.Priority > best.Priority {
+			best = cfg
 		}
 	}
-
-	return nil
+	return best
 }
 
 // ExtractHost returns the lowercase hostname from a URL string.

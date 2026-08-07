@@ -97,8 +97,10 @@ func (p *Processor) processScrapeJob(ctx context.Context, msg models.JobMessage,
 	// Build handler request
 	req := p.buildHandlerRequest(msg, msg.URL)
 
-	// Apply domain config to request
-	if domainCfg != nil && domainCfg.IsEnabled {
+	// Apply domain config to request. The cache only holds enabled configs, so
+	// reaching here at all means this one applies — no IsEnabled check needed,
+	// and none of the other config-driven branches need one either.
+	if domainCfg != nil {
 		if len(domainCfg.HandlerChain) > 0 {
 			req.AllowedHandlers = domainCfg.HandlerChain
 		}
@@ -264,7 +266,10 @@ func (p *Processor) buildHandlerRequest(msg models.JobMessage, targetURL string)
 		URL:        targetURL,
 		Country:    msg.Country,
 		UseBrowser: msg.UseBrowser,
-		Timeout:    60 * time.Second,
+		// Timeout is left zero: no per-attempt override unless a domain config
+		// sets requestTimeoutMs. The previous hardcoded 60s was never read by
+		// anything, so populating it here would have silently capped every
+		// attempt once the chain started honouring the field.
 	}
 }
 

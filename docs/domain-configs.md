@@ -53,7 +53,7 @@ curl -X POST http://localhost:8080/v1/domain-configs \
 | `matchSubdomains` | bool | `true` | Match `www.linkedin.com`, `mobile.linkedin.com`, etc. |
 | `priority` | int | `0` | Higher priority configs match first |
 | `handlerChain` | string[] | `["http","browser"]` | Which handlers to try, in order |
-| `requestTimeoutMs` | int | `30000` | Timeout per handler attempt (ms) |
+| `requestTimeoutMs` | int | `30000` | Timeout per handler attempt (ms). Can only shorten an attempt — each handler's own timeout (`BROWSER_TIMEOUT`) still applies as a ceiling |
 | `maxRetries` | int | `2` | Number of retry attempts on failure |
 | `minContentLength` | int | `0` | Minimum HTML bytes — below this triggers retry |
 | `failurePatterns` | string[] | `[]` | Regex patterns — if ANY match the HTML, it's a failure |

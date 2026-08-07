@@ -44,9 +44,24 @@ func (c *Chain) Execute(ctx context.Context, req *models.HandlerRequest) (*model
 			continue
 		}
 
+		// Per-attempt deadline from the domain config's requestTimeoutMs. Zero
+		// means no override, so the handler's own timeout is the only bound —
+		// which is the behaviour when no domain config sets the field.
+		//
+		// This can only tighten an attempt, never extend it: each handler still
+		// carries its own client timeout as a backstop.
+		attemptCtx := ctx
+		var cancel context.CancelFunc
+		if req.Timeout > 0 {
+			attemptCtx, cancel = context.WithTimeout(ctx, req.Timeout)
+		}
+
 		start := time.Now()
-		result, err := h.Scrape(ctx, req)
+		result, err := h.Scrape(attemptCtx, req)
 		elapsed := time.Since(start)
+		if cancel != nil {
+			cancel()
+		}
 
 		if err != nil {
 			slog.Warn("handler failed",
