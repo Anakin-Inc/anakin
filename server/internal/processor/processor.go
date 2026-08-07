@@ -5,6 +5,7 @@ package processor
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -168,8 +169,7 @@ func (p *Processor) processScrapeJob(ctx context.Context, msg models.JobMessage,
 	// Report proxy result
 	if req.ProxyURL != "" && p.proxyPool != nil {
 		if lastErr != nil {
-			isBlocked := result != nil && result.StatusCode == 403
-			p.proxyPool.RecordFailure(req.ProxyURL, targetHost, isBlocked)
+			p.proxyPool.RecordFailure(req.ProxyURL, targetHost, isBlockedErr(lastErr))
 		} else if result != nil {
 			p.proxyPool.RecordSuccess(req.ProxyURL, targetHost, result.DurationMs)
 		}
@@ -305,6 +305,21 @@ func (p *Processor) handleFailure(ctx context.Context, msg models.JobMessage, st
 	})
 
 	return jobErr
+}
+
+// isBlockedErr reports whether err means the target refused the request
+// outright. That is a signal about the proxy used for the attempt — the exit IP
+// is burnt for this host — as opposed to a transient failure such as a timeout,
+// which says nothing about the proxy's standing.
+//
+// Chain.Execute wraps the underlying handler error with %w, so errors.As
+// reaches through the aggregated "all handlers failed" error.
+func isBlockedErr(err error) bool {
+	var se *handler.StatusError
+	if !errors.As(err, &se) {
+		return false
+	}
+	return handler.IsBlockStatus(se.Code)
 }
 
 // telemetryEndpoint maps a job message to a telemetry endpoint name.

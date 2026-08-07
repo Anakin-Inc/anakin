@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+- **Blocked-proxy detection** — a target refusing a request (403/429/451) now reaches the proxy pool as a block, so the proxy takes the severe score penalty and is excluded from selection for that host. The status code previously could not survive the handler error path, so every failure was recorded as an ordinary one and no proxy was ever blocked (`server/internal/handler/errors.go`, `server/internal/processor/processor.go`)
+
 ## v0.1.1 (2026-03-20)
 
 ### Added
