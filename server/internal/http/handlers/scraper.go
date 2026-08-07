@@ -52,7 +52,7 @@ func (h *ScraperHandler) CreateJob(c *fiber.Ctx) error {
 		})
 	}
 
-	h.pool.Submit(models.JobMessage{
+	if err := h.pool.Submit(models.JobMessage{
 		JobID:        jobID,
 		URL:          req.URL,
 		JobType:      models.JobTypeURLScraper,
@@ -60,7 +60,9 @@ func (h *ScraperHandler) CreateJob(c *fiber.Ctx) error {
 		ForceFresh:   req.ForceFresh,
 		UseBrowser:   req.UseBrowser,
 		GenerateJson: req.GenerateJson,
-	})
+	}); err != nil {
+		return h.rejectJob(c, jobID, err)
+	}
 
 	slog.Info("job created", "jobId", jobID, "url", req.URL)
 
@@ -102,7 +104,7 @@ func (h *ScraperHandler) ScrapeSync(c *fiber.Ctx) error {
 		})
 	}
 
-	h.pool.Submit(models.JobMessage{
+	if err := h.pool.Submit(models.JobMessage{
 		JobID:        jobID,
 		URL:          req.URL,
 		JobType:      models.JobTypeURLScraper,
@@ -111,7 +113,9 @@ func (h *ScraperHandler) ScrapeSync(c *fiber.Ctx) error {
 		UseBrowser:   req.UseBrowser,
 		GenerateJson: req.GenerateJson,
 		SyncRequest:  true,
-	})
+	}); err != nil {
+		return h.rejectJob(c, jobID, err)
+	}
 
 	slog.Info("sync scrape started", "jobId", jobID, "url", req.URL)
 
@@ -267,6 +271,7 @@ func (h *ScraperHandler) CreateBatchJob(c *fiber.Ctx) error {
 		})
 	}
 
+	queued := 0
 	for _, u := range req.URLs {
 		childID := uuid.New().String()
 		if err := h.store.CreateJob(c.Context(), store.JobRecord{
@@ -276,7 +281,7 @@ func (h *ScraperHandler) CreateBatchJob(c *fiber.Ctx) error {
 			slog.Error("failed to insert child job", "error", err, "childId", childID)
 			continue
 		}
-		h.pool.Submit(models.JobMessage{
+		if err := h.pool.Submit(models.JobMessage{
 			JobID:        childID,
 			URL:          u,
 			JobType:      models.JobTypeURLScraper,
@@ -284,15 +289,53 @@ func (h *ScraperHandler) CreateBatchJob(c *fiber.Ctx) error {
 			UseBrowser:   req.UseBrowser,
 			GenerateJson: req.GenerateJson,
 			ParentJobID:  parentJobID,
-		})
+		}); err != nil {
+			// The child row exists but nothing will ever pick it up, so record it
+			// as failed rather than leaving it pending forever.
+			slog.Warn("batch child rejected", "error", err, "childId", childID, "url", u)
+			markRejected(c, h.store, childID, err)
+			continue
+		}
+		queued++
 	}
 
-	slog.Info("batch job created", "jobId", parentJobID, "urlCount", len(req.URLs))
+	// Nothing made it into the queue — report that rather than handing back a
+	// batch id whose every child already failed.
+	if queued == 0 {
+		return queueFullResponse(c)
+	}
+
+	slog.Info("batch job created", "jobId", parentJobID, "urlCount", len(req.URLs), "queued", queued)
 
 	return c.Status(fiber.StatusCreated).JSON(models.BatchJobResponse{
 		ID: parentJobID, Status: models.JobStatusPending,
 		JobType: models.JobTypeBatchURLScraper, URLs: req.URLs,
 		CreatedAt: time.Now().UTC().Format(time.RFC3339),
+	})
+}
+
+// rejectJob records an unqueued job as failed and returns 503 to the caller.
+func (h *ScraperHandler) rejectJob(c *fiber.Ctx, jobID string, submitErr error) error {
+	slog.Warn("job rejected", "error", submitErr, "jobId", jobID)
+	markRejected(c, h.store, jobID, submitErr)
+	return queueFullResponse(c)
+}
+
+// markRejected flips a already-created job to failed after the pool refused it.
+func markRejected(c *fiber.Ctx, s store.JobStore, jobID string, submitErr error) {
+	msg := submitErr.Error()
+	zero := 0
+	if err := s.UpdateStatus(c.Context(), jobID, models.JobStatusFailed, &msg, &zero); err != nil {
+		slog.Error("failed to mark rejected job as failed", "error", err, "jobId", jobID)
+	}
+}
+
+func queueFullResponse(c *fiber.Ctx) error {
+	// Advertise a short backoff — the queue drains as workers finish.
+	c.Set("Retry-After", "1")
+	return c.Status(fiber.StatusServiceUnavailable).JSON(models.ErrorResponse{
+		Error:   "queue_full",
+		Message: "The scrape queue is at capacity. Retry shortly, or raise WORKER_POOL_SIZE / JOB_BUFFER_SIZE.",
 	})
 }
 
