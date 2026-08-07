@@ -298,10 +298,11 @@ func (p *Processor) handleFailure(ctx context.Context, msg models.JobMessage, st
 	}
 
 	p.telemetry.Record(telemetry.Event{
-		Endpoint:     telemetryEndpoint(msg),
-		Status:       "failed",
-		DurationMs:   duration,
-		FailedDomain: domain.ExtractHost(msg.URL),
+		Endpoint:      telemetryEndpoint(msg),
+		Status:        "failed",
+		DurationMs:    duration,
+		FailedDomain:  domain.ExtractHost(msg.URL),
+		ErrorCategory: categorizeError(jobErr.Error()),
 	})
 
 	return jobErr
@@ -333,4 +334,56 @@ func hostedHint(errMsg string) string {
 	default:
 		return " | Tip: try anakin.io for managed scraping with zero infrastructure"
 	}
+}
+
+// categorizeError maps a raw job error into a fixed telemetry bucket. It runs on
+// the underlying jobErr (before the hosted-hint suffix is appended), so hint
+// text never influences the result, and it strips double-quoted spans first so
+// a target URL embedded in a Go *url.Error (Get "URL": …) cannot skew the
+// bucket. Categories are coarse so no raw error text is ever sent; returns
+// "unknown" when nothing matches. Buckets follow the phrasing the handlers
+// actually emit: Go net/http errors and the anakin.io API fallback
+// ("… returned HTTP 4xx") on the request path, and Playwright/Camoufox messages
+// ("navigation failed", "net::err_*"/"ns_error_*") on the browser path.
+func categorizeError(errMsg string) string {
+	lower := strings.ToLower(stripQuoted(errMsg))
+	switch {
+	case strings.Contains(lower, "failed to connect to browser") || strings.Contains(lower, "failed to create page") || strings.Contains(lower, "failed to get page content"):
+		return "browser_crash"
+	case strings.Contains(lower, "too many requests") || strings.Contains(lower, "rate limit") || strings.Contains(lower, "http 429"):
+		return "rate_limited"
+	case strings.Contains(lower, "timeout") || strings.Contains(lower, "timed out") || strings.Contains(lower, "deadline exceeded") || strings.Contains(lower, "err_timed_out"):
+		return "timeout"
+	case strings.Contains(lower, "forbidden") || strings.Contains(lower, "blocked") || strings.Contains(lower, "captcha") || strings.Contains(lower, "access denied") || strings.Contains(lower, "http 403"):
+		return "blocked"
+	case strings.Contains(lower, "connection refused") || strings.Contains(lower, "connection reset") || strings.Contains(lower, "no route to host") || strings.Contains(lower, "network is unreachable") || strings.Contains(lower, "err_connection_refused") || strings.Contains(lower, "err_connection_reset"):
+		return "connection_refused"
+	case strings.Contains(lower, "no such host") || strings.Contains(lower, "name resolution") || strings.Contains(lower, "server misbehaving") || strings.Contains(lower, "err_name_not_resolved"):
+		return "dns_failure"
+	case strings.Contains(lower, "browser") || strings.Contains(lower, "playwright") || strings.Contains(lower, "camoufox") || strings.Contains(lower, "chromium") || strings.Contains(lower, "navigation failed") || strings.Contains(lower, "net::err_") || strings.Contains(lower, "ns_error_"):
+		return "browser_crash"
+	case strings.Contains(lower, "unmarshal") || strings.Contains(lower, "malformed") || strings.Contains(lower, "parse") || strings.Contains(lower, "invalid character"):
+		return "parse_error"
+	default:
+		return "unknown"
+	}
+}
+
+// stripQuoted removes double-quoted spans from s. Go's *url.Error and similar
+// wrap the target URL in quotes (Get "http://…": …); dropping the quoted spans
+// keeps URL tokens from influencing the error category.
+func stripQuoted(s string) string {
+	var b strings.Builder
+	b.Grow(len(s))
+	inQuote := false
+	for _, r := range s {
+		if r == '"' {
+			inQuote = !inQuote
+			continue
+		}
+		if !inQuote {
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
 }
