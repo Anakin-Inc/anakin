@@ -27,6 +27,9 @@ type Config struct {
 	WorkerPoolSize int
 	JobBufferSize  int
 
+	// Rate Limiting (per-IP requests per minute; 0 disables)
+	RateLimit int
+
 	// Proxy (optional)
 	ProxyURL  string
 	ProxyURLs []string // Pool of proxy URLs for auto-selection
@@ -61,6 +64,7 @@ func Load() (*Config, error) {
 		MaxJobRetries:    getIntEnv("MAX_JOB_RETRIES", 3),
 		WorkerPoolSize:   getIntEnv("WORKER_POOL_SIZE", 5),
 		JobBufferSize:    getIntEnv("JOB_BUFFER_SIZE", 100),
+		RateLimit:        getIntEnv("RATE_LIMIT", 60),
 		ProxyURL:         os.Getenv("PROXY_URL"),
 		ProxyURLs:        getStringSliceEnv("PROXY_URLS"),
 		GeminiAPIKey:     os.Getenv("GEMINI_API_KEY"),
