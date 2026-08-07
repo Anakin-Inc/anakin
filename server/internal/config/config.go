@@ -37,6 +37,10 @@ type Config struct {
 	// Anakin.io API handler (optional — fallback when local handlers fail)
 	AnakinAPIKey string
 
+	// Security
+	APIKey           string // When set, every /v1 route requires it. Empty = open instance.
+	CORSAllowOrigins string // Origins allowed to read API responses in a browser
+
 	// Telemetry (anonymous usage data — opt-out via TELEMETRY=off)
 	TelemetryEnabled bool
 	TelemetryURL     string
@@ -61,6 +65,8 @@ func Load() (*Config, error) {
 		ProxyURLs:        getStringSliceEnv("PROXY_URLS"),
 		GeminiAPIKey:     os.Getenv("GEMINI_API_KEY"),
 		AnakinAPIKey:     os.Getenv("ANAKIN_API_KEY"),
+		APIKey:           os.Getenv("API_KEY"),
+		CORSAllowOrigins: getEnvOrDefault("CORS_ALLOW_ORIGINS", "http://localhost:3000"),
 		TelemetryEnabled: getBoolEnvDefault("TELEMETRY", true),
 		TelemetryURL:     os.Getenv("TELEMETRY_URL"),
 		LogLevel:         getEnvOrDefault("LOG_LEVEL", "INFO"),

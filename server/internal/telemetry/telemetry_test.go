@@ -55,6 +55,23 @@ func TestRecord_IncrementCounters(t *testing.T) {
 	}
 }
 
+func TestNew_NilDB(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	c := New(nil, true, srv.URL, false, 0)
+	defer c.Stop()
+
+	if !c.enabled {
+		t.Error("expected telemetry to stay enabled without a database")
+	}
+	if c.instanceID == "" {
+		t.Error("expected an ephemeral instance ID without a database")
+	}
+}
+
 func TestRecord_ConcurrentSafety(t *testing.T) {
 	c := &Collector{enabled: true, startedAt: time.Now()}
 	const goroutines = 100

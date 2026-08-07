@@ -1,17 +1,14 @@
 import { useState, useEffect } from 'react';
-import { useSearchParams, useNavigate } from 'react-router-dom';
+import { useSearchParams, Link } from 'react-router-dom';
 import { api } from '../api/client';
 import { StatusBadge } from '../components/StatusBadge';
 import { CodeBlock } from '../components/CodeBlock';
-import { useJobs } from '../hooks/useJobs';
-import type { JobResponse } from '../types';
+import type { JobResponse, BatchJobResponse, TrackedJob } from '../types';
 
 type Mode = 'sync' | 'async' | 'batch';
 
 export function Scrape() {
   const [searchParams] = useSearchParams();
-  const navigate = useNavigate();
-  const { addJob, updateJob } = useJobs();
   const [mode, setMode] = useState<Mode>('sync');
   const [url, setUrl] = useState(searchParams.get('url') || '');
   const [batchUrls, setBatchUrls] = useState('');
@@ -23,6 +20,7 @@ export function Scrape() {
   const [result, setResult] = useState<JobResponse | null>(null);
   const [polling, setPolling] = useState(false);
   const [activeTab, setActiveTab] = useState<'markdown' | 'html' | 'cleaned' | 'json'>('markdown');
+  const [batchSubmitted, setBatchSubmitted] = useState<BatchJobResponse | null>(null);
 
   // Load URL from search params
   useEffect(() => {
@@ -44,7 +42,7 @@ export function Scrape() {
         setResult(job);
         if (job.status === 'completed' || job.status === 'failed') {
           setPolling(false);
-          updateJob(result.id, { status: job.status });
+          updateTrackedJob(result.id, job.status);
         }
       } catch {
         // keep polling
@@ -52,12 +50,35 @@ export function Scrape() {
     }, 1500);
 
     return () => clearInterval(timer);
-  }, [polling, result?.id, result?.status, updateJob]);
+  }, [polling, result?.id, result?.status]);
+
+  function trackJob(job: JobResponse) {
+    const tracked: TrackedJob = {
+      id: job.id,
+      url: job.url || url,
+      type: 'single',
+      status: job.status,
+      createdAt: job.createdAt || new Date().toISOString(),
+    };
+    const jobs: TrackedJob[] = JSON.parse(localStorage.getItem('anakinscraper_jobs') || '[]');
+    jobs.unshift(tracked);
+    localStorage.setItem('anakinscraper_jobs', JSON.stringify(jobs.slice(0, 100)));
+  }
+
+  function updateTrackedJob(id: string, status: string) {
+    const jobs: TrackedJob[] = JSON.parse(localStorage.getItem('anakinscraper_jobs') || '[]');
+    const idx = jobs.findIndex((j) => j.id === id);
+    if (idx !== -1) {
+      jobs[idx].status = status as TrackedJob['status'];
+      localStorage.setItem('anakinscraper_jobs', JSON.stringify(jobs));
+    }
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
     setResult(null);
+    setBatchSubmitted(null);
     setLoading(true);
 
     try {
@@ -70,16 +91,20 @@ export function Scrape() {
         if (urls.length > 10) throw new Error('Maximum 10 URLs per batch');
 
         const batchJob = await api.scrapeBatch({ urls, useBrowser, generateJson });
-        // Track and navigate to jobs page
-        addJob({
+        // Track the job, then show an inline confirmation with a link to the
+        // batch detail page instead of navigating away immediately.
+        const tracked: TrackedJob = {
           id: batchJob.id,
           url: urls[0],
           type: 'batch',
           status: batchJob.status,
           createdAt: batchJob.createdAt || new Date().toISOString(),
           urls,
-        });
-        navigate(`/jobs/${batchJob.id}?type=batch`);
+        };
+        const jobs: TrackedJob[] = JSON.parse(localStorage.getItem('anakinscraper_jobs') || '[]');
+        jobs.unshift(tracked);
+        localStorage.setItem('anakinscraper_jobs', JSON.stringify(jobs.slice(0, 100)));
+        setBatchSubmitted(batchJob);
         return;
       }
 
@@ -91,13 +116,7 @@ export function Scrape() {
           timeout,
         });
         setResult(job);
-        addJob({
-          id: job.id,
-          url: job.url || url,
-          type: 'single',
-          status: job.status,
-          createdAt: job.createdAt || new Date().toISOString(),
-        });
+        trackJob(job);
       } else {
         const job = await api.scrapeAsync({
           url: url.trim(),
@@ -105,13 +124,7 @@ export function Scrape() {
           generateJson,
         });
         setResult(job);
-        addJob({
-          id: job.id,
-          url: job.url || url,
-          type: 'single',
-          status: job.status,
-          createdAt: job.createdAt || new Date().toISOString(),
-        });
+        trackJob(job);
         setPolling(true);
       }
     } catch (err: unknown) {
@@ -224,6 +237,29 @@ export function Scrape() {
       {error && (
         <div className="card p-4 border-red-500/30">
           <p className="text-red-400 text-sm">{error}</p>
+        </div>
+      )}
+
+      {/* Batch submitted confirmation */}
+      {batchSubmitted && (
+        <div className="card p-6 flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3 min-w-0">
+            <StatusBadge status={batchSubmitted.status} />
+            <div className="min-w-0">
+              <p className="text-sm font-medium text-zinc-100">
+                Batch job submitted ({batchSubmitted.urls?.length ?? 0} URLs)
+              </p>
+              <p className="text-xs text-zinc-500 font-mono truncate">
+                {batchSubmitted.id}
+              </p>
+            </div>
+          </div>
+          <Link
+            to={`/jobs/${batchSubmitted.id}?type=batch`}
+            className="btn-primary text-sm whitespace-nowrap"
+          >
+            View Results
+          </Link>
         </div>
       )}
 
