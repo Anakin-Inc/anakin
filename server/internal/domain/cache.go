@@ -50,6 +50,28 @@ func (c *Cache) Stop() {
 	close(c.stop)
 }
 
+// SetConfig immediately updates the cached configuration for a domain.
+func (c *Cache) SetConfig(cfg *DomainConfig) {
+	if c == nil || cfg == nil {
+		return
+	}
+
+	c.mu.Lock()
+	c.configs[cfg.Domain] = cfg
+	c.mu.Unlock()
+}
+
+// DeleteConfig immediately removes a domain configuration from the cache.
+func (c *Cache) DeleteConfig(domainName string) {
+	if c == nil {
+		return
+	}
+
+	c.mu.Lock()
+	delete(c.configs, domainName)
+	c.mu.Unlock()
+}
+
 func (c *Cache) refresh() {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()

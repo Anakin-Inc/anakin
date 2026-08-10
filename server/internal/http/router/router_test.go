@@ -28,7 +28,7 @@ func newTestApp(t *testing.T, apiKey string) *fiber.App {
 	t.Cleanup(func() { db.Close() })
 
 	app := fiber.New()
-	Setup(app, store.NewMemoryStore(), db, nil, nil, nil, apiKey)
+	Setup(app, store.NewMemoryStore(), db, nil, nil, nil, nil, apiKey)
 	return app
 }
 
