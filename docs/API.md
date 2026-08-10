@@ -38,7 +38,8 @@ None. You are responsible for managing load on your own infrastructure.
 GET /health
 ```
 
-Returns the service health status. Always accessible.
+Returns the service readiness status. Always accessible. It returns HTTP 503
+when the configured job store is unavailable.
 
 ```bash
 curl http://localhost:8080/health
@@ -56,7 +57,7 @@ curl http://localhost:8080/health
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `status` | string | Always `"ok"` |
+| `status` | string | `"ok"` when ready, otherwise `"unhealthy"` |
 | `database` | bool | Whether the PostgreSQL connection is healthy |
 | `service` | string | Always `"anakinscraper"` |
 
