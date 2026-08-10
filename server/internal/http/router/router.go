@@ -9,6 +9,7 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 
+	"github.com/Anakin-Inc/anakinscraper-oss/server/internal/domain"
 	"github.com/Anakin-Inc/anakinscraper-oss/server/internal/http/handlers"
 	"github.com/Anakin-Inc/anakinscraper-oss/server/internal/models"
 	"github.com/Anakin-Inc/anakinscraper-oss/server/internal/proxy"
@@ -19,7 +20,7 @@ import (
 
 // Setup configures all routes. db may be nil when running without PostgreSQL.
 // apiKey may be empty, which leaves the instance open — see requireAPIKey.
-func Setup(app *fiber.App, s store.JobStore, db *sql.DB, pool *worker.Pool, proxyPool *proxy.Pool, tel *telemetry.Collector, apiKey string) {
+func Setup(app *fiber.App, s store.JobStore, db *sql.DB, domainCache *domain.Cache, pool *worker.Pool, proxyPool *proxy.Pool, tel *telemetry.Collector, apiKey string) {
 	healthHandler := handlers.NewHealthHandler(s)
 	scraperHandler := handlers.NewScraperHandler(s, pool)
 	proxyScoresHandler := handlers.NewProxyScoresHandler(proxyPool)
@@ -39,7 +40,7 @@ func Setup(app *fiber.App, s store.JobStore, db *sql.DB, pool *worker.Pool, prox
 	v1.Get("/url-scraper/batch/:id", scraperHandler.GetBatchJob)
 
 	if db != nil {
-		domainConfigHandler := handlers.NewDomainConfigHandler(db)
+		domainConfigHandler := handlers.NewDomainConfigHandler(db, domainCache)
 		// Writes here change how every future scrape is routed (proxy, headers, blocking),
 		// so they always need a key — an open instance gets read-only access.
 		write := requireKeyConfigured(apiKey)

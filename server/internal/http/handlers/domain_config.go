@@ -14,10 +14,11 @@ import (
 
 type DomainConfigHandler struct {
 	repo *domain.Repository
+	cache *domain.Cache
 }
 
-func NewDomainConfigHandler(db *sql.DB) *DomainConfigHandler {
-	return &DomainConfigHandler{repo: domain.NewRepository(db)}
+func NewDomainConfigHandler(db *sql.DB, cache *domain.Cache) *DomainConfigHandler {
+	return &DomainConfigHandler{repo: domain.NewRepository(db), cache: cache}
 }
 
 func (h *DomainConfigHandler) List(c *fiber.Ctx) error {
@@ -76,6 +77,7 @@ func (h *DomainConfigHandler) Create(c *fiber.Ctx) error {
 			Error: "internal_error", Message: "Failed to create domain config",
 		})
 	}
+	h.cache.SetConfig(&cfg)
 	return c.Status(fiber.StatusCreated).JSON(cfg)
 }
 
@@ -94,6 +96,7 @@ func (h *DomainConfigHandler) Update(c *fiber.Ctx) error {
 			Error: "internal_error", Message: "Failed to update domain config",
 		})
 	}
+	h.cache.SetConfig(&cfg)
 	return c.JSON(cfg)
 }
 
@@ -104,6 +107,7 @@ func (h *DomainConfigHandler) Delete(c *fiber.Ctx) error {
 			Error: "internal_error", Message: "Failed to delete domain config",
 		})
 	}
+	h.cache.DeleteConfig(domainName)
 	return c.SendStatus(fiber.StatusNoContent)
 }
 

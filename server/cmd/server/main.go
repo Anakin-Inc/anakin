@@ -148,7 +148,7 @@ func main() {
 	}))
 
 	// Setup routes
-	router.Setup(app, jobStore, db, pool, proxyPool, tel, cfg.APIKey)
+	router.Setup(app, jobStore, db, domainCache, pool, proxyPool, tel, cfg.APIKey)
 
 	// Startup banner
 	fmt.Println("")
