@@ -30,6 +30,21 @@ func (m *MemoryStore) CreateJob(_ context.Context, job JobRecord) error {
 	return nil
 }
 
+func (m *MemoryStore) CreateBatchJobs(_ context.Context, parent JobRecord, children []JobRecord) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	now := time.Now().UTC()
+	parent.CreatedAt = now
+	m.jobs[parent.ID] = &parent
+	for _, child := range children {
+		j := child
+		j.CreatedAt = now
+		m.jobs[j.ID] = &j
+	}
+	return nil
+}
+
 func (m *MemoryStore) GetJob(_ context.Context, id string) (*JobRecord, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()

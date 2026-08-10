@@ -256,27 +256,20 @@ func (h *ScraperHandler) CreateBatchJob(c *fiber.Ctx) error {
 
 	parentJobID := uuid.New().String()
 	payload, _ := json.Marshal(req)
-
-	if err := h.store.CreateJob(c.Context(), store.JobRecord{
+	parent := store.JobRecord{
 		ID: parentJobID, JobType: models.JobTypeBatchURLScraper, URL: req.URLs[0],
 		Country: req.Country, Payload: string(payload),
-	}); err != nil {
-		slog.Error("failed to insert parent batch job", "error", err, "jobId", parentJobID)
-		return c.Status(fiber.StatusInternalServerError).JSON(models.ErrorResponse{
-			Error: "internal_error", Message: "Failed to create batch job",
-		})
 	}
 
+	children := make([]store.JobRecord, 0, len(req.URLs))
+	messages := make([]models.JobMessage, 0, len(req.URLs))
 	for _, u := range req.URLs {
 		childID := uuid.New().String()
-		if err := h.store.CreateJob(c.Context(), store.JobRecord{
+		children = append(children, store.JobRecord{
 			ID: childID, JobType: models.JobTypeURLScraper, URL: u,
 			Country: req.Country, Payload: "{}", ParentJobID: parentJobID,
-		}); err != nil {
-			slog.Error("failed to insert child job", "error", err, "childId", childID)
-			continue
-		}
-		h.pool.Submit(models.JobMessage{
+		})
+		messages = append(messages, models.JobMessage{
 			JobID:        childID,
 			URL:          u,
 			JobType:      models.JobTypeURLScraper,
@@ -285,6 +278,17 @@ func (h *ScraperHandler) CreateBatchJob(c *fiber.Ctx) error {
 			GenerateJson: req.GenerateJson,
 			ParentJobID:  parentJobID,
 		})
+	}
+
+	if err := h.store.CreateBatchJobs(c.Context(), parent, children); err != nil {
+		slog.Error("failed to insert batch jobs", "error", err, "jobId", parentJobID)
+		return c.Status(fiber.StatusInternalServerError).JSON(models.ErrorResponse{
+			Error: "internal_error", Message: "Failed to create batch job",
+		})
+	}
+
+	for _, msg := range messages {
+		h.pool.Submit(msg)
 	}
 
 	slog.Info("batch job created", "jobId", parentJobID, "urlCount", len(req.URLs))
