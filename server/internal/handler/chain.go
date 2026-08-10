@@ -30,6 +30,10 @@ func (c *Chain) Execute(ctx context.Context, req *models.HandlerRequest) (*model
 	var lastErr error
 
 	for _, h := range c.handlers {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+
 		if len(req.AllowedHandlers) > 0 && !contains(req.AllowedHandlers, h.Name()) {
 			continue
 		}
@@ -55,6 +59,9 @@ func (c *Chain) Execute(ctx context.Context, req *models.HandlerRequest) (*model
 				"duration_ms", elapsed.Milliseconds(),
 				"error", err,
 			)
+			if ctxErr := ctx.Err(); ctxErr != nil {
+				return nil, ctxErr
+			}
 			lastErr = err
 			continue
 		}
