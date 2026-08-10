@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"testing"
 
@@ -90,6 +91,49 @@ func TestChain_FallbackOnFirstFailure(t *testing.T) {
 	}
 	if result.Handler != "succeeding" {
 		t.Errorf("expected Handler=succeeding, got %q", result.Handler)
+	}
+}
+
+type cancelingHandler struct {
+	name   string
+	cancel context.CancelFunc
+	called bool
+}
+
+func (h *cancelingHandler) Name() string { return h.name }
+
+func (h *cancelingHandler) CanHandle(context.Context, *models.HandlerRequest) bool {
+	return true
+}
+
+func (h *cancelingHandler) IsHealthy() bool { return true }
+
+func (h *cancelingHandler) Scrape(ctx context.Context, _ *models.HandlerRequest) (*models.ScrapeResult, error) {
+	h.called = true
+	h.cancel()
+	return nil, ctx.Err()
+}
+
+func TestChain_CanceledContextStopsFallback(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	canceling := &cancelingHandler{name: "canceling", cancel: cancel}
+	fallback := &mockHandler{
+		name:      "fallback",
+		canHandle: true,
+		healthy:   true,
+		result:    &models.ScrapeResult{StatusCode: 200},
+	}
+
+	_, err := NewChain([]ScrapingHandler{canceling, fallback}).Execute(ctx, &models.HandlerRequest{
+		URL: "https://example.com",
+	})
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("error = %v, want context.Canceled", err)
+	}
+	if fallback.called {
+		t.Fatal("fallback handler was called after context cancellation")
 	}
 }
 

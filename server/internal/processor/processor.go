@@ -131,6 +131,11 @@ func (p *Processor) processScrapeJob(ctx context.Context, msg models.JobMessage,
 	var result *models.ScrapeResult
 	var lastErr error
 	for attempt := 0; attempt <= maxRetries; attempt++ {
+		if err := ctx.Err(); err != nil {
+			lastErr = err
+			break
+		}
+
 		if attempt > 0 {
 			slog.Debug("retrying scrape", "job_id", msg.JobID, "attempt", attempt)
 		}
@@ -139,6 +144,10 @@ func (p *Processor) processScrapeJob(ctx context.Context, msg models.JobMessage,
 		result, err = p.chain.Execute(ctx, req)
 		if err != nil {
 			lastErr = err
+			if ctxErr := ctx.Err(); ctxErr != nil {
+				lastErr = ctxErr
+				break
+			}
 			continue
 		}
 
