@@ -11,9 +11,9 @@ import (
 
 func TestDeriveBatchStatus(t *testing.T) {
 	tests := []struct {
-		name                              string
+		name                               string
 		total, pending, processing, failed int
-		expected                          string
+		expected                           string
 	}{
 		{"all failed is failed, not completed", 5, 0, 0, 5, models.JobStatusFailed},
 		{"all succeeded is completed", 3, 0, 0, 0, models.JobStatusCompleted},
