@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"sync"
 	"time"
+
+	"github.com/Anakin-Inc/anakinscraper-oss/server/internal/models"
 )
 
 // MemoryStore is an in-memory job store for zero-config "try it" mode.
@@ -112,15 +114,17 @@ func (m *MemoryStore) UpdateParentBatchStatus(_ context.Context, parentJobID str
 		return nil
 	}
 
-	var total, pending, processing int
+	var total, pending, processing, failed int
 	for _, j := range m.jobs {
 		if j.ParentJobID == parentJobID {
 			total++
 			switch j.Status {
-			case "pending":
+			case models.JobStatusPending:
 				pending++
-			case "processing":
+			case models.JobStatusProcessing:
 				processing++
+			case models.JobStatusFailed:
+				failed++
 			}
 		}
 	}
@@ -128,12 +132,8 @@ func (m *MemoryStore) UpdateParentBatchStatus(_ context.Context, parentJobID str
 		return nil
 	}
 
-	if pending == total {
-		parent.Status = "pending"
-	} else if pending > 0 || processing > 0 {
-		parent.Status = "processing"
-	} else {
-		parent.Status = "completed"
+	parent.Status = models.DeriveBatchStatus(total, pending, processing, failed)
+	if parent.Status == models.JobStatusCompleted || parent.Status == models.JobStatusFailed {
 		now := time.Now().UTC()
 		parent.CompletedAt = &now
 		parent.DurationMs = int(now.Sub(parent.CreatedAt).Milliseconds())

@@ -46,6 +46,8 @@ export interface BatchJobResponse {
   jobType: string;
   urls?: string[];
   results?: BatchResult[];
+  succeeded: number;
+  failed: number;
   createdAt?: string;
   completedAt?: string | null;
   durationMs?: number | null;

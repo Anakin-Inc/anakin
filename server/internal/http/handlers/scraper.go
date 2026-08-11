@@ -267,6 +267,7 @@ func (h *ScraperHandler) CreateBatchJob(c *fiber.Ctx) error {
 		})
 	}
 
+	created := 0
 	for _, u := range req.URLs {
 		childID := uuid.New().String()
 		if err := h.store.CreateJob(c.Context(), store.JobRecord{
@@ -276,6 +277,7 @@ func (h *ScraperHandler) CreateBatchJob(c *fiber.Ctx) error {
 			slog.Error("failed to insert child job", "error", err, "childId", childID)
 			continue
 		}
+		created++
 		h.pool.Submit(models.JobMessage{
 			JobID:        childID,
 			URL:          u,
@@ -287,7 +289,19 @@ func (h *ScraperHandler) CreateBatchJob(c *fiber.Ctx) error {
 		})
 	}
 
-	slog.Info("batch job created", "jobId", parentJobID, "urlCount", len(req.URLs))
+	// No child was persisted, so the batch can never progress. Mark it failed
+	// instead of leaving it pinned at "pending" behind a 201.
+	if created == 0 {
+		errMsg := "no child jobs could be created"
+		if err := h.store.UpdateStatus(c.Context(), parentJobID, models.JobStatusFailed, &errMsg, nil); err != nil {
+			slog.Error("failed to mark empty batch job as failed", "error", err, "jobId", parentJobID)
+		}
+		return c.Status(fiber.StatusInternalServerError).JSON(models.ErrorResponse{
+			Error: "internal_error", Message: "Failed to create batch job",
+		})
+	}
+
+	slog.Info("batch job created", "jobId", parentJobID, "urlCount", len(req.URLs), "created", created)
 
 	return c.Status(fiber.StatusCreated).JSON(models.BatchJobResponse{
 		ID: parentJobID, Status: models.JobStatusPending,
@@ -320,7 +334,7 @@ func (h *ScraperHandler) GetBatchJob(c *fiber.Ctx) error {
 
 	results := make([]models.BatchResult, 0, len(children))
 	urls := make([]string, 0, len(children))
-	hasPending, hasProcessing := false, false
+	var pending, processing, failed, succeeded int
 
 	for idx, child := range children {
 		urls = append(urls, child.URL)
@@ -342,27 +356,28 @@ func (h *ScraperHandler) GetBatchJob(c *fiber.Ctx) error {
 				item.Cached = result.Cached
 			}
 		}
-		if child.Status == models.JobStatusPending {
-			hasPending = true
-		}
-		if child.Status == models.JobStatusProcessing {
-			hasProcessing = true
+		switch child.Status {
+		case models.JobStatusPending:
+			pending++
+		case models.JobStatusProcessing:
+			processing++
+		case models.JobStatusFailed:
+			failed++
+		case models.JobStatusCompleted:
+			succeeded++
 		}
 		results = append(results, item)
 	}
 
 	derivedStatus := parent.Status
-	if hasPending {
-		derivedStatus = models.JobStatusPending
-	} else if hasProcessing {
-		derivedStatus = models.JobStatusProcessing
-	} else if len(results) > 0 {
-		derivedStatus = models.JobStatusCompleted
+	if len(children) > 0 {
+		derivedStatus = models.DeriveBatchStatus(len(children), pending, processing, failed)
 	}
 
 	resp := models.BatchJobResponse{
 		ID: parent.ID, Status: derivedStatus, JobType: models.JobTypeBatchURLScraper,
-		URLs: urls, Results: results, CreatedAt: parent.CreatedAt.Format(time.RFC3339),
+		URLs: urls, Results: results, Succeeded: succeeded, Failed: failed,
+		CreatedAt: parent.CreatedAt.Format(time.RFC3339),
 	}
 	if parent.CompletedAt != nil {
 		t := parent.CompletedAt.Format(time.RFC3339)

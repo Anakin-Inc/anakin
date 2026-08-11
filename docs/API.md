@@ -247,9 +247,14 @@ curl -X POST http://localhost:8080/v1/url-scraper/batch \
     "https://example.com/page-2",
     "https://example.com/page-3"
   ],
+  "succeeded": 0,
+  "failed": 0,
   "createdAt": "2025-01-15T10:30:00Z"
 }
 ```
+
+Returns `500 Internal Server Error` if no child job could be persisted — the
+batch is marked `failed` rather than accepted as a batch that would never run.
 
 ---
 
@@ -300,13 +305,27 @@ curl http://localhost:8080/v1/url-scraper/batch/BATCH_JOB_UUID
       "durationMs": 987
     }
   ],
+  "succeeded": 2,
+  "failed": 0,
   "createdAt": "2025-01-15T10:30:00Z",
   "completedAt": "2025-01-15T10:30:08Z",
   "durationMs": 5678
 }
 ```
 
-The batch `status` is derived from the child jobs: it remains `pending` if any child is pending, `processing` if any child is processing, and becomes `completed` once all children finish.
+The batch `status` is derived from the child jobs:
+
+| Children | Batch `status` |
+|----------|----------------|
+| all pending | `pending` |
+| any pending or processing | `processing` |
+| all finished, **all failed** | `failed` |
+| all finished, at least one succeeded | `completed` |
+
+`completed` means the batch finished, **not** that every URL succeeded — a mixed
+batch where some URLs failed is still `completed`. Use the `succeeded` and
+`failed` counts (or each result's own `status`) to tell the difference; a batch
+is only reported `failed` when every URL failed.
 
 ---
 

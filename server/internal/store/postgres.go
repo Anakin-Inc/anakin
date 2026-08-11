@@ -6,6 +6,8 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+
+	"github.com/Anakin-Inc/anakinscraper-oss/server/internal/models"
 )
 
 // PostgresStore is a PostgreSQL-backed job store.
@@ -138,14 +140,15 @@ func (s *PostgresStore) UpdateParentBatchStatus(ctx context.Context, parentJobID
 		return nil
 	}
 
-	var total, pending, processing int
+	var total, pending, processing, failed int
 	err := s.db.QueryRowContext(ctx,
 		`SELECT
 			COUNT(*) AS total,
 			COUNT(*) FILTER (WHERE status = 'pending') AS pending,
-			COUNT(*) FILTER (WHERE status = 'processing') AS processing
+			COUNT(*) FILTER (WHERE status = 'processing') AS processing,
+			COUNT(*) FILTER (WHERE status = 'failed') AS failed
 		 FROM scrape_requests WHERE parent_job_id = $1`, parentJobID,
-	).Scan(&total, &pending, &processing)
+	).Scan(&total, &pending, &processing, &failed)
 	if err != nil {
 		return err
 	}
@@ -153,14 +156,9 @@ func (s *PostgresStore) UpdateParentBatchStatus(ctx context.Context, parentJobID
 		return nil
 	}
 
-	status := "completed"
-	if pending == total {
-		status = "pending"
-	} else if pending > 0 || processing > 0 {
-		status = "processing"
-	}
+	status := models.DeriveBatchStatus(total, pending, processing, failed)
 
-	if status == "completed" {
+	if status == models.JobStatusCompleted || status == models.JobStatusFailed {
 		_, err = s.db.ExecContext(ctx,
 			`UPDATE scrape_requests
 			 SET status = $1, duration_ms = GREATEST(0, CAST(EXTRACT(EPOCH FROM (NOW() - created_at)) * 1000 AS INTEGER)), completed_at = NOW()
