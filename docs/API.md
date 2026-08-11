@@ -98,12 +98,12 @@ curl -X POST http://localhost:8080/v1/scrape \
 
 **Response (completed):** Same shape as [GET /v1/url-scraper/:id](#get-job-result) when status is `completed`.
 
-**Response (timeout):**
+**Response (timeout):** The job keeps running server-side — the ID in the message can still be polled.
 
 ```json
 {
   "error": "timeout",
-  "message": "Job did not complete within 30 seconds. Use the async endpoint and poll for results."
+  "message": "Job 550e8400-e29b-41d4-a716-446655440000 is still processing. Use GET /v1/url-scraper/550e8400-e29b-41d4-a716-446655440000 to poll for the result, or use the async POST /v1/url-scraper endpoint for long-running scrapes."
 }
 ```
 

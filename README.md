@@ -266,6 +266,7 @@ All configuration via environment variables:
 | `WORKER_POOL_SIZE` | `5` | Concurrent scrape workers |
 | `JOB_BUFFER_SIZE` | `100` | Job queue buffer size |
 | `JOB_TIMEOUT` | `120` | Max job duration (seconds) |
+| `MAX_JOB_RETRIES` | `3` | Retries after a failed scrape attempt. Overridden per domain by a domain config's `maxRetries`. |
 | `PROXY_URL` | — | Default HTTP proxy for the HTTP handler |
 | `PROXY_URLS` | — | Comma-separated proxy pool for auto-selection (Thompson Sampling) |
 | `GEMINI_API_KEY` | — | Google Gemini API key for structured JSON extraction ([get one free](https://aistudio.google.com/apikey)) |
