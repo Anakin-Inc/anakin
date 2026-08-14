@@ -18,6 +18,27 @@ type ConvertResult struct {
 	Markdown    string
 }
 
+// mainContentSelectors identify the region of a page that holds the real
+// content, in priority order. They are used both to extract that region and to
+// tell site chrome apart from chrome-shaped tags nested inside the content.
+var mainContentSelectors = []string{
+	"main", "article", "[role='main']",
+	"#content", "#main-content", ".content", ".main-content",
+}
+
+// mainContentSelector matches any of the main-content containers at once.
+var mainContentSelector = strings.Join(mainContentSelectors, ", ")
+
+// alwaysStripped never carries readable content, wherever it appears. <nav> is
+// navigation at any depth, so it belongs here too.
+const alwaysStripped = "script, style, noscript, iframe, svg, nav"
+
+// scopedChrome is boilerplate at page level, but semantic HTML also nests these
+// inside the content: <article><header> holds the headline and byline, and
+// <article><footer> holds tags and the author bio. Only the page-level ones are
+// removed — see stripChrome.
+const scopedChrome = "header, footer"
+
 // HTMLToMarkdown converts raw HTML to clean markdown.
 func HTMLToMarkdown(rawHTML string, pageURL string) (*ConvertResult, error) {
 	doc, err := goquery.NewDocumentFromReader(strings.NewReader(rawHTML))
@@ -25,7 +46,8 @@ func HTMLToMarkdown(rawHTML string, pageURL string) (*ConvertResult, error) {
 		return nil, fmt.Errorf("failed to parse HTML: %w", err)
 	}
 
-	doc.Find("script, style, noscript, iframe, svg, nav, footer, header").Remove()
+	doc.Find(alwaysStripped).Remove()
+	stripChrome(doc)
 
 	if pageURL != "" {
 		resolveURLs(doc, pageURL)
@@ -63,12 +85,20 @@ func HTMLToMarkdown(rawHTML string, pageURL string) (*ConvertResult, error) {
 	}, nil
 }
 
+// stripChrome removes the page-level header and footer without touching the
+// same tags when they sit inside a main-content container. Removing every
+// <header> also deletes <article><header><h1>…</h1></header>, which is where
+// most blog and news pages keep the title of the very page being scraped.
+func stripChrome(doc *goquery.Document) {
+	doc.Find(scopedChrome).FilterFunction(func(_ int, s *goquery.Selection) bool {
+		// ParentsFiltered walks ancestors only, so a <header id="content">
+		// still counts as chrome rather than matching itself.
+		return s.ParentsFiltered(mainContentSelector).Length() == 0
+	}).Remove()
+}
+
 func extractMainContent(doc *goquery.Document) string {
-	selectors := []string{
-		"main", "article", "[role='main']",
-		"#content", "#main-content", ".content", ".main-content",
-	}
-	for _, sel := range selectors {
+	for _, sel := range mainContentSelectors {
 		selection := doc.Find(sel)
 		if selection.Length() > 0 {
 			html, err := selection.First().Html()
