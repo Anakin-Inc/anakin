@@ -41,14 +41,20 @@ type Processor struct {
 	detector     *domain.Detector
 	geminiClient *gemini.Client
 	telemetry    *telemetry.Collector
+	maxRetries   int
 }
 
 // NewProcessor creates a new job processor.
 // domainCache, proxyPool, geminiClient, and tel are optional (can be nil).
-func NewProcessor(s store.JobStore, chain *handler.Chain, domainCache *domain.Cache, proxyPool *proxy.Pool, geminiClient *gemini.Client, tel *telemetry.Collector) *Processor {
+// maxRetries is the retry count used when a domain config does not set its own;
+// values below zero are treated as zero (a single attempt, no retry).
+func NewProcessor(s store.JobStore, chain *handler.Chain, domainCache *domain.Cache, proxyPool *proxy.Pool, geminiClient *gemini.Client, tel *telemetry.Collector, maxRetries int) *Processor {
 	var det *domain.Detector
 	if domainCache != nil {
 		det = domain.NewDetector()
+	}
+	if maxRetries < 0 {
+		maxRetries = 0
 	}
 	return &Processor{
 		store:        s,
@@ -58,6 +64,7 @@ func NewProcessor(s store.JobStore, chain *handler.Chain, domainCache *domain.Ca
 		detector:     det,
 		geminiClient: geminiClient,
 		telemetry:    tel,
+		maxRetries:   maxRetries,
 	}
 }
 
@@ -135,8 +142,8 @@ func (p *Processor) processScrapeJob(ctx context.Context, msg models.JobMessage,
 		req.ProxyURL = p.proxyPool.SelectProxy(targetHost)
 	}
 
-	// Execute with retries
-	maxRetries := 1
+	// Execute with retries: per-domain config wins, otherwise MAX_JOB_RETRIES.
+	maxRetries := p.maxRetries
 	if domainCfg != nil && domainCfg.MaxRetries > 0 {
 		maxRetries = domainCfg.MaxRetries
 	}

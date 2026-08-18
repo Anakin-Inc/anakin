@@ -56,8 +56,16 @@ func (h *BrowserHandler) Scrape(ctx context.Context, req *models.HandlerRequest)
 		return nil, err
 	}
 
+	// Playwright drives its own timeouts and ignores ctx, so the per-request
+	// timeout has to be passed explicitly rather than relying on the deadline
+	// the chain puts on ctx.
+	timeout := h.timeout
+	if req.Timeout > 0 {
+		timeout = req.Timeout
+	}
+
 	browser, err := h.pw.Chromium.Connect(h.wsURL, playwright.BrowserTypeConnectOptions{
-		Timeout: playwright.Float(float64(h.timeout.Milliseconds())),
+		Timeout: playwright.Float(float64(timeout.Milliseconds())),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to browser at %s: %w", h.wsURL, err)
@@ -83,10 +91,9 @@ func (h *BrowserHandler) Scrape(ctx context.Context, req *models.HandlerRequest)
 		return nil, fmt.Errorf("failed to create page: %w", err)
 	}
 
-	timeout := h.timeout.Milliseconds()
 	_, err = page.Goto(req.URL, playwright.PageGotoOptions{
 		WaitUntil: playwright.WaitUntilStateNetworkidle,
-		Timeout:   playwright.Float(float64(timeout)),
+		Timeout:   playwright.Float(float64(timeout.Milliseconds())),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("navigation failed: %w", err)

@@ -44,9 +44,14 @@ func (c *Chain) Execute(ctx context.Context, req *models.HandlerRequest) (*model
 			continue
 		}
 
+		// req.Timeout is documented as "timeout per handler attempt", so the
+		// deadline is derived per handler rather than shared across the chain.
+		attemptCtx, cancel := attemptContext(ctx, req.Timeout)
+
 		start := time.Now()
-		result, err := h.Scrape(ctx, req)
+		result, err := h.Scrape(attemptCtx, req)
 		elapsed := time.Since(start)
+		cancel()
 
 		if err != nil {
 			slog.Warn("handler failed",
@@ -75,6 +80,16 @@ func (c *Chain) Execute(ctx context.Context, req *models.HandlerRequest) (*model
 		lastErr = fmt.Errorf("no available handlers for request")
 	}
 	return nil, fmt.Errorf("all handlers failed: %w", lastErr)
+}
+
+// attemptContext bounds a single handler attempt to timeout. A zero or negative
+// timeout means "no per-attempt limit" — the job context still applies.
+// The returned cancel func is always non-nil and must be called.
+func attemptContext(ctx context.Context, timeout time.Duration) (context.Context, context.CancelFunc) {
+	if timeout <= 0 {
+		return context.WithCancel(ctx)
+	}
+	return context.WithTimeout(ctx, timeout)
 }
 
 func contains(ss []string, s string) bool {

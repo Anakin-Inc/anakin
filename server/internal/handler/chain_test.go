@@ -2,8 +2,10 @@ package handler
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/Anakin-Inc/anakinscraper-oss/server/internal/models"
 )
@@ -16,6 +18,11 @@ type mockHandler struct {
 	result    *models.ScrapeResult
 	err       error
 	called    bool
+
+	// Deadline observed on the context Execute passed to Scrape.
+	gotDeadline   time.Time
+	hadDeadline   bool
+	blockUntilCtx bool // block until the context is done, then return its error
 }
 
 func (m *mockHandler) Name() string { return m.name }
@@ -26,8 +33,13 @@ func (m *mockHandler) CanHandle(_ context.Context, _ *models.HandlerRequest) boo
 
 func (m *mockHandler) IsHealthy() bool { return m.healthy }
 
-func (m *mockHandler) Scrape(_ context.Context, _ *models.HandlerRequest) (*models.ScrapeResult, error) {
+func (m *mockHandler) Scrape(ctx context.Context, _ *models.HandlerRequest) (*models.ScrapeResult, error) {
 	m.called = true
+	m.gotDeadline, m.hadDeadline = ctx.Deadline()
+	if m.blockUntilCtx {
+		<-ctx.Done()
+		return nil, ctx.Err()
+	}
 	return m.result, m.err
 }
 
@@ -177,6 +189,97 @@ func TestChain_AllHandlersFailReturnsError(t *testing.T) {
 	}
 	if !h1.called || !h2.called {
 		t.Error("both handlers should have been called")
+	}
+}
+
+// req.Timeout is what a domain config's requestTimeoutMs becomes. Before this
+// was wired up, handlers received the bare job context and the setting did nothing.
+func TestChain_RequestTimeoutBoundsTheAttempt(t *testing.T) {
+	h := &mockHandler{
+		name: "http", canHandle: true, healthy: true,
+		blockUntilCtx: true,
+	}
+	chain := NewChain([]ScrapingHandler{h})
+
+	start := time.Now()
+	_, err := chain.Execute(context.Background(), &models.HandlerRequest{
+		URL:     "https://example.com",
+		Timeout: 50 * time.Millisecond,
+	})
+	elapsed := time.Since(start)
+
+	if err == nil {
+		t.Fatal("expected the attempt to time out, got nil error")
+	}
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Errorf("expected a DeadlineExceeded error, got %v", err)
+	}
+	if elapsed > time.Second {
+		t.Errorf("attempt ran for %v, the 50ms timeout was not applied", elapsed)
+	}
+}
+
+// "Timeout per handler attempt" — each handler gets its own budget, so a slow
+// first handler must not eat the fallback's.
+func TestChain_TimeoutIsPerHandlerNotShared(t *testing.T) {
+	slow := &mockHandler{name: "http", canHandle: true, healthy: true, blockUntilCtx: true}
+	fallback := &mockHandler{
+		name: "browser", canHandle: true, healthy: true,
+		result: &models.ScrapeResult{StatusCode: 200},
+	}
+
+	chain := NewChain([]ScrapingHandler{slow, fallback})
+	result, err := chain.Execute(context.Background(), &models.HandlerRequest{
+		URL:     "https://example.com",
+		Timeout: 50 * time.Millisecond,
+	})
+	if err != nil {
+		t.Fatalf("fallback should still have run after the first attempt timed out: %v", err)
+	}
+	if result.Handler != "browser" {
+		t.Errorf("expected Handler=browser, got %q", result.Handler)
+	}
+
+	if !fallback.hadDeadline {
+		t.Fatal("fallback attempt had no deadline")
+	}
+	if remaining := time.Until(fallback.gotDeadline); remaining <= 0 {
+		t.Errorf("fallback inherited an already-expired deadline (%v remaining)", remaining)
+	}
+}
+
+func TestChain_ZeroTimeoutLeavesContextUnbounded(t *testing.T) {
+	h := &mockHandler{
+		name: "http", canHandle: true, healthy: true,
+		result: &models.ScrapeResult{StatusCode: 200},
+	}
+	chain := NewChain([]ScrapingHandler{h})
+
+	if _, err := chain.Execute(context.Background(), &models.HandlerRequest{URL: "https://example.com"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if h.hadDeadline {
+		t.Error("a zero Timeout should not impose a deadline")
+	}
+}
+
+// A per-attempt timeout must never extend the job's own deadline.
+func TestChain_JobDeadlineStillWinsWhenShorter(t *testing.T) {
+	h := &mockHandler{name: "http", canHandle: true, healthy: true, blockUntilCtx: true}
+	chain := NewChain([]ScrapingHandler{h})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+
+	start := time.Now()
+	if _, err := chain.Execute(ctx, &models.HandlerRequest{
+		URL:     "https://example.com",
+		Timeout: time.Hour,
+	}); err == nil {
+		t.Fatal("expected an error once the job context expired")
+	}
+	if elapsed := time.Since(start); elapsed > time.Second {
+		t.Errorf("ran for %v — the job deadline was overridden by the longer per-attempt timeout", elapsed)
 	}
 }
 

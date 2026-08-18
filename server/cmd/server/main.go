@@ -119,7 +119,7 @@ func main() {
 		cfg.GeminiAPIKey != "", len(cfg.ProxyURLs))
 
 	// Create processor and worker pool
-	proc := processor.NewProcessor(jobStore, chain, domainCache, proxyPool, geminiClient, tel)
+	proc := processor.NewProcessor(jobStore, chain, domainCache, proxyPool, geminiClient, tel, cfg.MaxJobRetries)
 	pool := worker.NewPool(proc, cfg.WorkerPoolSize, cfg.JobBufferSize, cfg.JobTimeout)
 	pool.Start(bgCtx)
 
