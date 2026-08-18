@@ -3,6 +3,7 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -13,6 +14,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/Anakin-Inc/anakinscraper-oss/server/internal/models"
+	"github.com/Anakin-Inc/anakinscraper-oss/server/internal/netguard"
 	"github.com/Anakin-Inc/anakinscraper-oss/server/internal/store"
 	"github.com/Anakin-Inc/anakinscraper-oss/server/internal/worker"
 )
@@ -20,10 +22,12 @@ import (
 type ScraperHandler struct {
 	store store.JobStore
 	pool  *worker.Pool
+	// allowPrivateTargets disables the SSRF guard for operators who scrape internal sites.
+	allowPrivateTargets bool
 }
 
-func NewScraperHandler(s store.JobStore, pool *worker.Pool) *ScraperHandler {
-	return &ScraperHandler{store: s, pool: pool}
+func NewScraperHandler(s store.JobStore, pool *worker.Pool, allowPrivateTargets bool) *ScraperHandler {
+	return &ScraperHandler{store: s, pool: pool, allowPrivateTargets: allowPrivateTargets}
 }
 
 func (h *ScraperHandler) CreateJob(c *fiber.Ctx) error {
@@ -33,7 +37,7 @@ func (h *ScraperHandler) CreateJob(c *fiber.Ctx) error {
 			Error: "invalid_request", Message: "Invalid request body",
 		})
 	}
-	if err := validateURL(req.URL); err != nil {
+	if err := h.validateURL(c.Context(), req.URL); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(models.ErrorResponse{
 			Error: "invalid_url", Message: err.Error(),
 		})
@@ -82,7 +86,7 @@ func (h *ScraperHandler) ScrapeSync(c *fiber.Ctx) error {
 			Error: "invalid_request", Message: "Invalid request body",
 		})
 	}
-	if err := validateURL(req.URL); err != nil {
+	if err := h.validateURL(c.Context(), req.URL); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(models.ErrorResponse{
 			Error: "invalid_url", Message: err.Error(),
 		})
@@ -247,7 +251,7 @@ func (h *ScraperHandler) CreateBatchJob(c *fiber.Ctx) error {
 		})
 	}
 	for i, u := range req.URLs {
-		if err := validateURL(u); err != nil {
+		if err := h.validateURL(c.Context(), u); err != nil {
 			return c.Status(fiber.StatusBadRequest).JSON(models.ErrorResponse{
 				Error: "invalid_url", Message: fmt.Sprintf("Invalid URL at index %d: %s", i, err.Error()),
 			})
@@ -383,7 +387,7 @@ type scrapeResultJSON struct {
 	Cached        *bool                         `json:"cached,omitempty"`
 }
 
-func validateURL(rawURL string) error {
+func (h *ScraperHandler) validateURL(ctx context.Context, rawURL string) error {
 	if rawURL == "" {
 		return fiber.NewError(fiber.StatusBadRequest, "URL is required")
 	}
@@ -396,6 +400,11 @@ func validateURL(rawURL string) error {
 	}
 	if u.Host == "" {
 		return fiber.NewError(fiber.StatusBadRequest, "URL must have a host")
+	}
+	if !h.allowPrivateTargets {
+		if err := netguard.ValidateHost(ctx, u.Hostname()); err != nil {
+			return fiber.NewError(fiber.StatusBadRequest, err.Error())
+		}
 	}
 	return nil
 }
