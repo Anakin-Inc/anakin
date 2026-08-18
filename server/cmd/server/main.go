@@ -75,7 +75,11 @@ func main() {
 	}
 
 	// Build handler chain: HTTP -> Browser -> [API fallback]
-	httpHandler := handler.NewHTTPHandler(cfg.BrowserTimeout, cfg.ProxyURL)
+	if cfg.AllowPrivateTargets {
+		slog.Warn("ALLOW_PRIVATE_TARGETS is on — scrape targets may reach loopback and private networks")
+	}
+
+	httpHandler := handler.NewHTTPHandler(cfg.BrowserTimeout, cfg.ProxyURL, cfg.AllowPrivateTargets)
 	browserHandler := handler.NewBrowserHandler(cfg.BrowserWSURL, cfg.BrowserTimeout, cfg.BrowserLoadWait)
 	handlers := []handler.ScrapingHandler{httpHandler, browserHandler}
 
@@ -148,7 +152,7 @@ func main() {
 	}))
 
 	// Setup routes
-	router.Setup(app, jobStore, db, pool, proxyPool, tel, cfg.APIKey)
+	router.Setup(app, jobStore, db, pool, proxyPool, tel, cfg.APIKey, cfg.AllowPrivateTargets)
 
 	// Startup banner
 	fmt.Println("")

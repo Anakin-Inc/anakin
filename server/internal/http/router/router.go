@@ -19,9 +19,9 @@ import (
 
 // Setup configures all routes. db may be nil when running without PostgreSQL.
 // apiKey may be empty, which leaves the instance open — see requireAPIKey.
-func Setup(app *fiber.App, s store.JobStore, db *sql.DB, pool *worker.Pool, proxyPool *proxy.Pool, tel *telemetry.Collector, apiKey string) {
+func Setup(app *fiber.App, s store.JobStore, db *sql.DB, pool *worker.Pool, proxyPool *proxy.Pool, tel *telemetry.Collector, apiKey string, allowPrivateTargets bool) {
 	healthHandler := handlers.NewHealthHandler(s)
-	scraperHandler := handlers.NewScraperHandler(s, pool)
+	scraperHandler := handlers.NewScraperHandler(s, pool, allowPrivateTargets)
 	proxyScoresHandler := handlers.NewProxyScoresHandler(proxyPool)
 
 	// /health stays open so container and load-balancer probes work without credentials.
