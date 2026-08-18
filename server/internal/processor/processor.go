@@ -21,6 +21,17 @@ import (
 	"github.com/Anakin-Inc/anakinscraper-oss/server/internal/telemetry"
 )
 
+// persistTimeout bounds the writes that record a job's final state.
+const persistTimeout = 5 * time.Second
+
+// persistCtx returns a context for terminal-state writes. It drops the job's deadline —
+// database/sql refuses any query whose context is already done, so reusing the job
+// context leaves a job that timed out (or was cancelled at shutdown) stuck in
+// "processing" forever — while keeping the write itself bounded.
+func persistCtx(ctx context.Context) (context.Context, context.CancelFunc) {
+	return context.WithTimeout(context.WithoutCancel(ctx), persistTimeout)
+}
+
 // Processor handles individual scraping jobs.
 type Processor struct {
 	store        store.JobStore
@@ -71,7 +82,9 @@ func (p *Processor) ProcessJob(ctx context.Context, msg models.JobMessage) error
 		return p.handleFailure(ctx, msg, start, err)
 	}
 
-	if parentErr := p.store.UpdateParentBatchStatus(ctx, msg.ParentJobID); parentErr != nil {
+	parentCtx, cancel := persistCtx(ctx)
+	defer cancel()
+	if parentErr := p.store.UpdateParentBatchStatus(parentCtx, msg.ParentJobID); parentErr != nil {
 		slog.Warn("failed to update parent batch status", "parent_job_id", msg.ParentJobID, "error", parentErr)
 	}
 
@@ -231,12 +244,15 @@ func (p *Processor) processScrapeJob(ctx context.Context, msg models.JobMessage,
 	if err != nil {
 		return fmt.Errorf("failed to marshal result: %w", err)
 	}
-	if err := p.store.StoreResult(ctx, msg.JobID, string(resultData)); err != nil {
+	writeCtx, cancel := persistCtx(ctx)
+	defer cancel()
+
+	if err := p.store.StoreResult(writeCtx, msg.JobID, string(resultData)); err != nil {
 		slog.Error("failed to store result", "job_id", msg.JobID, "error", err)
 		return fmt.Errorf("failed to store result: %w", err)
 	}
 
-	if err := p.store.UpdateCompleted(ctx, msg.JobID, duration, len(result.HTML)); err != nil {
+	if err := p.store.UpdateCompleted(writeCtx, msg.JobID, duration, len(result.HTML)); err != nil {
 		slog.Error("failed to update job in database", "job_id", msg.JobID, "error", err)
 		return fmt.Errorf("failed to update job: %w", err)
 	}
@@ -284,16 +300,20 @@ func (p *Processor) handleFailure(ctx context.Context, msg models.JobMessage, st
 		DurationMs:  &duration,
 	}
 
+	// The job context is typically already expired here — that is what we are recording.
+	writeCtx, cancel := persistCtx(ctx)
+	defer cancel()
+
 	failData, _ := json.Marshal(response)
-	if err := p.store.StoreResult(ctx, msg.JobID, string(failData)); err != nil {
+	if err := p.store.StoreResult(writeCtx, msg.JobID, string(failData)); err != nil {
 		slog.Error("failed to store failure", "job_id", msg.JobID, "error", err)
 	}
 
-	if err := p.store.UpdateStatus(ctx, msg.JobID, models.JobStatusFailed, &errMsg, &duration); err != nil {
+	if err := p.store.UpdateStatus(writeCtx, msg.JobID, models.JobStatusFailed, &errMsg, &duration); err != nil {
 		slog.Error("failed to update failed job in database", "job_id", msg.JobID, "error", err)
 	}
 
-	if parentErr := p.store.UpdateParentBatchStatus(ctx, msg.ParentJobID); parentErr != nil {
+	if parentErr := p.store.UpdateParentBatchStatus(writeCtx, msg.ParentJobID); parentErr != nil {
 		slog.Warn("failed to update parent batch status", "parent_job_id", msg.ParentJobID, "error", parentErr)
 	}
 
