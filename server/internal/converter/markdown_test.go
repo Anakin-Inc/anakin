@@ -151,6 +151,84 @@ func TestHTMLToMarkdown(t *testing.T) {
 		}
 	})
 
+	t.Run("article header and footer survive chrome stripping", func(t *testing.T) {
+		// Semantic HTML puts the post title and byline in <article><header> and
+		// the tags in <article><footer>. Stripping every header/footer on the
+		// page threw away the title of the page being scraped.
+		body := strings.Repeat("The body of the post. ", 10)
+		html := `<html><body>
+			<header><p>Site tagline</p></header>
+			<article>
+				<header><h1>Post Title</h1><p>By Jane Doe</p></header>
+				<p>` + body + `</p>
+				<footer><p>Filed under Testing</p></footer>
+			</article>
+			<footer><p>Copyright 2026</p></footer>
+		</body></html>`
+
+		result, err := HTMLToMarkdown(html, "")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		for _, want := range []string{"# Post Title", "By Jane Doe", "Filed under Testing"} {
+			if !strings.Contains(result.Markdown, want) {
+				t.Errorf("expected markdown to contain %q, got: %q", want, result.Markdown)
+			}
+		}
+		for _, unwanted := range []string{"Site tagline", "Copyright 2026"} {
+			if strings.Contains(result.Markdown, unwanted) {
+				t.Errorf("expected site chrome %q to be removed, got: %q", unwanted, result.Markdown)
+			}
+		}
+	})
+
+	t.Run("page chrome is removed even when the body fallback is used", func(t *testing.T) {
+		// <main> here is under the 100-character threshold, so the cleaner falls
+		// back to the whole body — the page-level header and footer must already
+		// be gone by then, while the header nested in <main> must not be.
+		html := `<html><body>
+			<header><p>Site tagline</p></header>
+			<main><header><h2>Section</h2></header><p>Short.</p></main>
+			<footer><p>Copyright 2026</p></footer>
+		</body></html>`
+
+		result, err := HTMLToMarkdown(html, "")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		for _, want := range []string{"Section", "Short."} {
+			if !strings.Contains(result.Markdown, want) {
+				t.Errorf("expected markdown to contain %q, got: %q", want, result.Markdown)
+			}
+		}
+		for _, unwanted := range []string{"Site tagline", "Copyright 2026"} {
+			if strings.Contains(result.Markdown, unwanted) {
+				t.Errorf("expected site chrome %q to be removed, got: %q", unwanted, result.Markdown)
+			}
+		}
+	})
+
+	t.Run("nav is removed even inside the main content", func(t *testing.T) {
+		body := strings.Repeat("The body of the post. ", 10)
+		html := `<html><body>
+			<article>
+				<nav><a href="/prev">Previous post</a></nav>
+				<p>` + body + `</p>
+			</article>
+		</body></html>`
+
+		result, err := HTMLToMarkdown(html, "")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if strings.Contains(result.Markdown, "Previous post") {
+			t.Errorf("expected nav content to be removed, got: %q", result.Markdown)
+		}
+		if !strings.Contains(result.Markdown, "The body of the post.") {
+			t.Errorf("expected article body to be preserved, got: %q", result.Markdown)
+		}
+	})
+
 	t.Run("result includes cleaned HTML", func(t *testing.T) {
 		html := `<html><body><p>Hello World</p></body></html>`
 		result, err := HTMLToMarkdown(html, "")
