@@ -19,16 +19,13 @@ func (e *StatusError) Error() string {
 	return fmt.Sprintf("%s handler: HTTP %d %s", e.Handler, e.StatusCode, http.StatusText(e.StatusCode))
 }
 
-
 func (e *StatusError) IsBlocked() bool {
 	return IsBlockedStatus(e.StatusCode)
 }
 
-
 func IsBlockedStatus(code int) bool {
 	return code == http.StatusForbidden || code == http.StatusTooManyRequests
 }
-
 
 func IsBlockedErr(err error) bool {
 	var se *StatusError
