@@ -52,7 +52,7 @@ func (h *ScraperHandler) CreateJob(c *fiber.Ctx) error {
 		})
 	}
 
-	h.pool.Submit(models.JobMessage{
+	if !h.pool.Submit(models.JobMessage{
 		JobID:        jobID,
 		URL:          req.URL,
 		JobType:      models.JobTypeURLScraper,
@@ -60,7 +60,10 @@ func (h *ScraperHandler) CreateJob(c *fiber.Ctx) error {
 		ForceFresh:   req.ForceFresh,
 		UseBrowser:   req.UseBrowser,
 		GenerateJson: req.GenerateJson,
-	})
+	}) {
+		slog.Warn("job queue full, shedding load", "jobId", jobID, "url", req.URL)
+		return h.rejectOverloaded(c, jobID)
+	}
 
 	slog.Info("job created", "jobId", jobID, "url", req.URL)
 
@@ -102,7 +105,7 @@ func (h *ScraperHandler) ScrapeSync(c *fiber.Ctx) error {
 		})
 	}
 
-	h.pool.Submit(models.JobMessage{
+	if !h.pool.Submit(models.JobMessage{
 		JobID:        jobID,
 		URL:          req.URL,
 		JobType:      models.JobTypeURLScraper,
@@ -111,7 +114,10 @@ func (h *ScraperHandler) ScrapeSync(c *fiber.Ctx) error {
 		UseBrowser:   req.UseBrowser,
 		GenerateJson: req.GenerateJson,
 		SyncRequest:  true,
-	})
+	}) {
+		slog.Warn("job queue full, shedding load", "jobId", jobID, "url", req.URL)
+		return h.rejectOverloaded(c, jobID)
+	}
 
 	slog.Info("sync scrape started", "jobId", jobID, "url", req.URL)
 
@@ -276,7 +282,7 @@ func (h *ScraperHandler) CreateBatchJob(c *fiber.Ctx) error {
 			slog.Error("failed to insert child job", "error", err, "childId", childID)
 			continue
 		}
-		h.pool.Submit(models.JobMessage{
+		if !h.pool.Submit(models.JobMessage{
 			JobID:        childID,
 			URL:          u,
 			JobType:      models.JobTypeURLScraper,
@@ -284,7 +290,13 @@ func (h *ScraperHandler) CreateBatchJob(c *fiber.Ctx) error {
 			UseBrowser:   req.UseBrowser,
 			GenerateJson: req.GenerateJson,
 			ParentJobID:  parentJobID,
-		})
+		}) {
+			slog.Warn("job queue full, marking batch child failed", "childId", childID, "url", u)
+			reason := "server overloaded: job queue is full"
+			if err := h.store.UpdateStatus(c.Context(), childID, models.JobStatusFailed, &reason, nil); err != nil {
+				slog.Error("failed to mark shed child job as failed", "error", err, "childId", childID)
+			}
+		}
 	}
 
 	slog.Info("batch job created", "jobId", parentJobID, "urlCount", len(req.URLs))
@@ -381,6 +393,21 @@ type scrapeResultJSON struct {
 	Markdown      *string                       `json:"markdown,omitempty"`
 	GeneratedJson *models.GeneratedJsonResponse `json:"generatedJson,omitempty"`
 	Cached        *bool                         `json:"cached,omitempty"`
+}
+
+// rejectOverloaded sheds load when the worker queue is full: it marks the
+// just-created job failed (so it isn't left as a permanent "pending" zombie)
+// and returns 503 with a Retry-After hint.
+func (h *ScraperHandler) rejectOverloaded(c *fiber.Ctx, jobID string) error {
+	reason := "server overloaded: job queue is full"
+	if err := h.store.UpdateStatus(c.Context(), jobID, models.JobStatusFailed, &reason, nil); err != nil {
+		slog.Error("failed to mark shed job as failed", "error", err, "jobId", jobID)
+	}
+	c.Set("Retry-After", "2")
+	return c.Status(fiber.StatusServiceUnavailable).JSON(models.ErrorResponse{
+		Error:   "server_busy",
+		Message: "Job queue is full. Please retry after a short delay.",
+	})
 }
 
 func validateURL(rawURL string) error {
