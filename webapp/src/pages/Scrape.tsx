@@ -1,25 +1,26 @@
 import { useState, useEffect } from 'react';
-import { useSearchParams, useNavigate } from 'react-router-dom';
+import { useSearchParams, Link } from 'react-router-dom';
 import { api } from '../api/client';
 import { StatusBadge } from '../components/StatusBadge';
 import { CodeBlock } from '../components/CodeBlock';
-import type { JobResponse, TrackedJob } from '../types';
+import type { JobResponse, BatchJobResponse, TrackedJob } from '../types';
 
 type Mode = 'sync' | 'async' | 'batch';
 
 export function Scrape() {
   const [searchParams] = useSearchParams();
-  const navigate = useNavigate();
   const [mode, setMode] = useState<Mode>('sync');
   const [url, setUrl] = useState(searchParams.get('url') || '');
   const [batchUrls, setBatchUrls] = useState('');
   const [useBrowser, setUseBrowser] = useState(false);
   const [generateJson, setGenerateJson] = useState(false);
+  const [timeout, setTimeout] = useState(30); // seconds, sync mode only (server default 30, max 120)
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<JobResponse | null>(null);
   const [polling, setPolling] = useState(false);
   const [activeTab, setActiveTab] = useState<'markdown' | 'html' | 'cleaned' | 'json'>('markdown');
+  const [batchSubmitted, setBatchSubmitted] = useState<BatchJobResponse | null>(null);
 
   // Load URL from search params
   useEffect(() => {
@@ -77,6 +78,7 @@ export function Scrape() {
     e.preventDefault();
     setError(null);
     setResult(null);
+    setBatchSubmitted(null);
     setLoading(true);
 
     try {
@@ -89,7 +91,8 @@ export function Scrape() {
         if (urls.length > 10) throw new Error('Maximum 10 URLs per batch');
 
         const batchJob = await api.scrapeBatch({ urls, useBrowser, generateJson });
-        // Track and navigate to jobs page
+        // Track the job, then show an inline confirmation with a link to the
+        // batch detail page instead of navigating away immediately.
         const tracked: TrackedJob = {
           id: batchJob.id,
           url: urls[0],
@@ -101,18 +104,25 @@ export function Scrape() {
         const jobs: TrackedJob[] = JSON.parse(localStorage.getItem('anakinscraper_jobs') || '[]');
         jobs.unshift(tracked);
         localStorage.setItem('anakinscraper_jobs', JSON.stringify(jobs.slice(0, 100)));
-        navigate(`/jobs/${batchJob.id}?type=batch`);
+        setBatchSubmitted(batchJob);
         return;
       }
 
-      const data = { url: url.trim(), useBrowser, generateJson };
-
       if (mode === 'sync') {
-        const job = await api.scrapeSync(data);
+        const job = await api.scrapeSync({
+          url: url.trim(),
+          useBrowser,
+          generateJson,
+          timeout,
+        });
         setResult(job);
         trackJob(job);
       } else {
-        const job = await api.scrapeAsync(data);
+        const job = await api.scrapeAsync({
+          url: url.trim(),
+          useBrowser,
+          generateJson,
+        });
         setResult(job);
         trackJob(job);
         setPolling(true);
@@ -194,6 +204,19 @@ export function Scrape() {
             />
             Extract structured JSON
           </label>
+          {mode === 'sync' && (
+            <label className="flex items-center gap-2 text-sm text-zinc-300 cursor-pointer">
+              <span className="text-zinc-500">Timeout (s)</span>
+              <input
+                type="number"
+                min={1}
+                max={120}
+                value={timeout}
+                onChange={(e) => setTimeout(Math.max(1, Math.min(120, parseInt(e.target.value) || 30)))}
+                className="input w-24"
+              />
+            </label>
+          )}
         </div>
 
         <div className="flex items-center gap-3 pt-2">
@@ -205,7 +228,7 @@ export function Scrape() {
             {loading ? 'Submitting...' : polling ? 'Polling...' : mode === 'sync' ? 'Scrape (wait for result)' : mode === 'async' ? 'Submit & Poll' : 'Submit Batch'}
           </button>
           {mode === 'sync' && (
-            <span className="text-xs text-zinc-500">30s timeout</span>
+            <span className="text-xs text-zinc-500">{timeout}s timeout (max 120s)</span>
           )}
         </div>
       </form>
@@ -214,6 +237,29 @@ export function Scrape() {
       {error && (
         <div className="card p-4 border-red-500/30">
           <p className="text-red-400 text-sm">{error}</p>
+        </div>
+      )}
+
+      {/* Batch submitted confirmation */}
+      {batchSubmitted && (
+        <div className="card p-6 flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3 min-w-0">
+            <StatusBadge status={batchSubmitted.status} />
+            <div className="min-w-0">
+              <p className="text-sm font-medium text-zinc-100">
+                Batch job submitted ({batchSubmitted.urls?.length ?? 0} URLs)
+              </p>
+              <p className="text-xs text-zinc-500 font-mono truncate">
+                {batchSubmitted.id}
+              </p>
+            </div>
+          </div>
+          <Link
+            to={`/jobs/${batchSubmitted.id}?type=batch`}
+            className="btn-primary text-sm whitespace-nowrap"
+          >
+            View Results
+          </Link>
         </div>
       )}
 

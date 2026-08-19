@@ -31,11 +31,18 @@ type Config struct {
 	ProxyURL  string
 	ProxyURLs []string // Pool of proxy URLs for auto-selection
 
+	// Security
+	AllowPrivateTargets bool // Allow scraping loopback/private/link-local addresses (SSRF guard off)
+
 	// Gemini (optional — enables generateJson)
 	GeminiAPIKey string
 
 	// Anakin.io API handler (optional — fallback when local handlers fail)
 	AnakinAPIKey string
+
+	// Security
+	APIKey           string // When set, every /v1 route requires it. Empty = open instance.
+	CORSAllowOrigins string // Origins allowed to read API responses in a browser
 
 	// Telemetry (anonymous usage data — opt-out via TELEMETRY=off)
 	TelemetryEnabled bool
@@ -48,19 +55,24 @@ type Config struct {
 // Load reads configuration from environment variables.
 func Load() (*Config, error) {
 	cfg := &Config{
-		Port:             getEnvOrDefault("PORT", "8080"),
-		DatabaseURL:      os.Getenv("DATABASE_URL"),
-		BrowserWSURL:     getEnvOrDefault("BROWSER_WS_URL", "ws://localhost:9222/camoufox"),
-		BrowserTimeout:   getDurationEnv("BROWSER_TIMEOUT", 60*time.Second),
-		BrowserLoadWait:  getDurationEnv("BROWSER_LOAD_WAIT", 2*time.Second),
-		JobTimeout:       getDurationEnv("JOB_TIMEOUT", 120*time.Second),
-		MaxJobRetries:    getIntEnv("MAX_JOB_RETRIES", 3),
-		WorkerPoolSize:   getIntEnv("WORKER_POOL_SIZE", 5),
-		JobBufferSize:    getIntEnv("JOB_BUFFER_SIZE", 100),
-		ProxyURL:         os.Getenv("PROXY_URL"),
-		ProxyURLs:        getStringSliceEnv("PROXY_URLS"),
+		Port:            getEnvOrDefault("PORT", "8080"),
+		DatabaseURL:     os.Getenv("DATABASE_URL"),
+		BrowserWSURL:    getEnvOrDefault("BROWSER_WS_URL", "ws://localhost:9222/camoufox"),
+		BrowserTimeout:  getDurationEnv("BROWSER_TIMEOUT", 60*time.Second),
+		BrowserLoadWait: getDurationEnv("BROWSER_LOAD_WAIT", 2*time.Second),
+		JobTimeout:      getDurationEnv("JOB_TIMEOUT", 120*time.Second),
+		MaxJobRetries:   getIntEnv("MAX_JOB_RETRIES", 3),
+		WorkerPoolSize:  getIntEnv("WORKER_POOL_SIZE", 5),
+		JobBufferSize:   getIntEnv("JOB_BUFFER_SIZE", 100),
+		ProxyURL:        os.Getenv("PROXY_URL"),
+		ProxyURLs:       getStringSliceEnv("PROXY_URLS"),
+
+		AllowPrivateTargets: getBoolEnvDefault("ALLOW_PRIVATE_TARGETS", false),
+
 		GeminiAPIKey:     os.Getenv("GEMINI_API_KEY"),
 		AnakinAPIKey:     os.Getenv("ANAKIN_API_KEY"),
+		APIKey:           os.Getenv("API_KEY"),
+		CORSAllowOrigins: getEnvOrDefault("CORS_ALLOW_ORIGINS", "http://localhost:3000"),
 		TelemetryEnabled: getBoolEnvDefault("TELEMETRY", true),
 		TelemetryURL:     os.Getenv("TELEMETRY_URL"),
 		LogLevel:         getEnvOrDefault("LOG_LEVEL", "INFO"),

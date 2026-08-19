@@ -4,7 +4,25 @@ Base URL: `http://localhost:8080`
 
 ## Authentication
 
-None. AnakinScraper OSS is designed for self-hosting and does not require authentication. All endpoints are open.
+Optional, off by default. Set `API_KEY` on the server and every `/v1` route requires it:
+
+```bash
+curl -X POST http://localhost:8080/v1/scrape \
+  -H "X-API-Key: $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"url": "https://example.com"}'
+```
+
+The key is accepted as `X-API-Key`, `Api-Key`, or `Authorization: Bearer <key>`. Requests
+without it get `401 unauthorized`. `GET /health` is always open so container probes work.
+
+With `API_KEY` unset the instance is open, and **domain config writes
+(`POST`/`PUT`/`DELETE /v1/domain-configs`) are disabled** — they change how every future
+scrape is routed, so they always require a key.
+
+Browsers are additionally limited by `CORS_ALLOW_ORIGINS` (default
+`http://localhost:3000`, the webapp dev server). Only listed origins can read API
+responses from a web page.
 
 ## Rate Limiting
 
@@ -50,7 +68,7 @@ curl http://localhost:8080/health
 POST /v1/scrape
 ```
 
-Submit a scrape job and wait for the result. The server holds the connection open for up to 30 seconds. If the job completes within that window, the full result is returned directly. If not, a `408` timeout error is returned.
+Submit a scrape job and wait for the result. The server holds the connection open for up to 30 seconds by default (configurable via the `timeout` field, max 120 seconds). If the job completes within that window, the full result is returned directly. If not, a `408` timeout error is returned.
 
 This is the simplest way to scrape a page when you do not want to deal with polling.
 
@@ -62,11 +80,21 @@ curl -X POST http://localhost:8080/v1/scrape \
   -d '{
     "url": "https://example.com",
     "useBrowser": false,
-    "generateJson": false
+    "generateJson": false,
+    "timeout": 30
   }'
 ```
 
-**Request body:** Same as [POST /v1/url-scraper](#scrape-a-url-async).
+**Request body:**
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `url` | string | **required** | The URL to scrape. Must use `http` or `https` scheme. |
+| `country` | string | `""` | Proxy country code. Reserved for future use (no-op in OSS; available on hosted [anakin.io](https://anakin.io)). |
+| `forceFresh` | bool | `false` | Bypass cache. Reserved for future use (no-op in OSS; available on hosted [anakin.io](https://anakin.io)). |
+| `useBrowser` | bool | `false` | Force browser rendering via Camoufox. When `false`, the HTTP handler is tried first and the browser is used as a fallback. |
+| `generateJson` | bool | `false` | Extract structured JSON from the page using Gemini. Requires the `GEMINI_API_KEY` environment variable to be set on the server. |
+| `timeout` | int | `30` | Seconds to wait for the result before returning a `408` timeout. Max `120`. Only applies to this sync endpoint; the async endpoint always returns immediately with a job ID. |
 
 **Response (completed):** Same shape as [GET /v1/url-scraper/:id](#get-job-result) when status is `completed`.
 
@@ -600,4 +628,4 @@ while true; do
 done
 ```
 
-Alternatively, use `POST /v1/scrape` to avoid polling entirely -- it blocks until the job finishes or times out at 30 seconds.
+Alternatively, use `POST /v1/scrape` to avoid polling entirely -- it blocks until the job finishes or times out (30 seconds by default, configurable via the `timeout` field).

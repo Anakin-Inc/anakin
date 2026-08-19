@@ -1,23 +1,12 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { StatusBadge } from '../components/StatusBadge';
 import { api } from '../api/client';
-import type { TrackedJob } from '../types';
+import { useJobs } from '../hooks/useJobs';
 
 export function Jobs() {
-  const [jobs, setJobs] = useState<TrackedJob[]>([]);
+  const { jobs, updateJob, removeJob, clearJobs } = useJobs();
   const [filter, setFilter] = useState<string>('all');
-
-  const loadJobs = useCallback(() => {
-    const raw = localStorage.getItem('anakinscraper_jobs');
-    if (raw) {
-      setJobs(JSON.parse(raw));
-    }
-  }, []);
-
-  useEffect(() => {
-    loadJobs();
-  }, [loadJobs]);
 
   // Refresh active job statuses
   useEffect(() => {
@@ -27,50 +16,27 @@ export function Jobs() {
     if (activeJobs.length === 0) return;
 
     const timer = setInterval(async () => {
-      const updated = [...jobs];
-      let changed = false;
-
       for (const job of activeJobs) {
         try {
           if (job.type === 'batch') {
             const result = await api.getBatchJob(job.id);
-            const idx = updated.findIndex((j) => j.id === job.id);
-            if (idx !== -1 && updated[idx].status !== result.status) {
-              updated[idx] = { ...updated[idx], status: result.status };
-              changed = true;
+            if (result.status !== job.status) {
+              updateJob(job.id, { status: result.status });
             }
           } else {
             const result = await api.getJob(job.id);
-            const idx = updated.findIndex((j) => j.id === job.id);
-            if (idx !== -1 && updated[idx].status !== result.status) {
-              updated[idx] = { ...updated[idx], status: result.status };
-              changed = true;
+            if (result.status !== job.status) {
+              updateJob(job.id, { status: result.status });
             }
           }
         } catch {
           // skip
         }
       }
-
-      if (changed) {
-        setJobs(updated);
-        localStorage.setItem('anakinscraper_jobs', JSON.stringify(updated));
-      }
     }, 2000);
 
     return () => clearInterval(timer);
-  }, [jobs]);
-
-  const removeJob = (id: string) => {
-    const updated = jobs.filter((j) => j.id !== id);
-    setJobs(updated);
-    localStorage.setItem('anakinscraper_jobs', JSON.stringify(updated));
-  };
-
-  const clearAll = () => {
-    setJobs([]);
-    localStorage.removeItem('anakinscraper_jobs');
-  };
+  }, [jobs, updateJob]);
 
   const filtered =
     filter === 'all' ? jobs : jobs.filter((j) => j.status === filter);
@@ -85,7 +51,7 @@ export function Jobs() {
           </p>
         </div>
         {jobs.length > 0 && (
-          <button onClick={clearAll} className="btn-danger text-sm">
+          <button onClick={clearJobs} className="btn-danger text-sm">
             Clear All
           </button>
         )}

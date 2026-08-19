@@ -75,7 +75,11 @@ func main() {
 	}
 
 	// Build handler chain: HTTP -> Browser -> [API fallback]
-	httpHandler := handler.NewHTTPHandler(cfg.BrowserTimeout, cfg.ProxyURL)
+	if cfg.AllowPrivateTargets {
+		slog.Warn("ALLOW_PRIVATE_TARGETS is on — scrape targets may reach loopback and private networks")
+	}
+
+	httpHandler := handler.NewHTTPHandler(cfg.BrowserTimeout, cfg.ProxyURL, cfg.AllowPrivateTargets)
 	browserHandler := handler.NewBrowserHandler(cfg.BrowserWSURL, cfg.BrowserTimeout, cfg.BrowserLoadWait)
 	handlers := []handler.ScrapingHandler{httpHandler, browserHandler}
 
@@ -119,6 +123,13 @@ func main() {
 	pool := worker.NewPool(proc, cfg.WorkerPoolSize, cfg.JobBufferSize, cfg.JobTimeout)
 	pool.Start(bgCtx)
 
+	if cfg.APIKey == "" {
+		slog.Warn("API_KEY is not set — the API is open to anyone who can reach this port; domain config writes are disabled")
+	}
+	if cfg.CORSAllowOrigins == "*" {
+		slog.Warn("CORS_ALLOW_ORIGINS is \"*\" — any website a browser visits can call this API and read the responses")
+	}
+
 	// Create Fiber app
 	app := fiber.New(fiber.Config{
 		AppName:      "AnakinScraper",
@@ -135,13 +146,13 @@ func main() {
 		TimeFormat: time.RFC3339,
 	}))
 	app.Use(cors.New(cors.Config{
-		AllowOrigins: "*",
+		AllowOrigins: cfg.CORSAllowOrigins,
 		AllowMethods: "GET,POST,PUT,DELETE,OPTIONS",
 		AllowHeaders: "Origin,Content-Type,Accept,Authorization,X-API-Key,Api-Key",
 	}))
 
 	// Setup routes
-	router.Setup(app, jobStore, db, pool, proxyPool, tel)
+	router.Setup(app, jobStore, db, pool, proxyPool, tel, cfg.APIKey, cfg.AllowPrivateTargets)
 
 	// Startup banner
 	fmt.Println("")
