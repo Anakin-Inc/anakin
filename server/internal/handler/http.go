@@ -107,7 +107,7 @@ func (h *HTTPHandler) Scrape(ctx context.Context, req *models.HandlerRequest) (*
 	}
 
 	if resp.StatusCode >= 400 {
-		return nil, fmt.Errorf("HTTP %d: %s", resp.StatusCode, http.StatusText(resp.StatusCode))
+		return nil, &StatusError{Handler: h.Name(), StatusCode: resp.StatusCode}
 	}
 
 	return &models.ScrapeResult{

@@ -178,10 +178,10 @@ func (p *Processor) processScrapeJob(ctx context.Context, msg models.JobMessage,
 		break
 	}
 
-	// Report proxy result
+	// Report proxy result.  A "blocked" failure (403/429) is inferred from the handler's typed
 	if req.ProxyURL != "" && p.proxyPool != nil {
 		if lastErr != nil {
-			isBlocked := result != nil && result.StatusCode == 403
+			isBlocked := handler.IsBlockedErr(lastErr) || (result != nil && handler.IsBlockedStatus(result.StatusCode))
 			p.proxyPool.RecordFailure(req.ProxyURL, targetHost, isBlocked)
 		} else if result != nil {
 			p.proxyPool.RecordSuccess(req.ProxyURL, targetHost, result.DurationMs)
