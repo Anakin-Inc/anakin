@@ -147,7 +147,7 @@ func (h *APIHandler) Scrape(ctx context.Context, req *models.HandlerRequest) (*m
 			"status", resp.StatusCode,
 			"body", truncate(string(respBody), 200),
 		)
-		return nil, fmt.Errorf("%s API returned HTTP %d", h.name, resp.StatusCode)
+		return nil, &StatusError{Handler: h.name, StatusCode: resp.StatusCode}
 	}
 
 	// Parse the response — expects {"html": "...", "markdown": "...", ...}
