@@ -56,9 +56,14 @@ func (p *Pool) worker(parentCtx context.Context, id int) {
 	slog.Debug("worker exited", "worker", id)
 }
 
-// Submit adds a job to the pool. Non-blocking if buffer has space.
-func (p *Pool) Submit(msg models.JobMessage) {
-	p.jobs <- msg
+// Submit tries to enqueue a job without blocking. It returns false when the buffer is full, letting the caller shed load (respond 503) instead of stalling the request goroutine until a worker frees a slot.
+func (p *Pool) Submit(msg models.JobMessage) bool {
+	select {
+	case p.jobs <- msg:
+		return true
+	default:
+		return false
+	}
 }
 
 // Drain closes the job channel and waits for all in-flight jobs to finish.
