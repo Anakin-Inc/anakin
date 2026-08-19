@@ -399,7 +399,6 @@ type scrapeResultJSON struct {
 	Cached        *bool                         `json:"cached,omitempty"`
 }
 
-
 func (h *ScraperHandler) rejectOverloaded(c *fiber.Ctx, jobID string) error {
 	reason := "server overloaded: job queue is full"
 	if err := h.store.UpdateStatus(c.Context(), jobID, models.JobStatusFailed, &reason, nil); err != nil {
@@ -411,7 +410,6 @@ func (h *ScraperHandler) rejectOverloaded(c *fiber.Ctx, jobID string) error {
 		Message: "Job queue is full. Please retry after a short delay.",
 	})
 }
-
 
 func (h *ScraperHandler) validateURL(ctx context.Context, rawURL string) error {
 
