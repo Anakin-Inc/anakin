@@ -77,9 +77,31 @@ type BatchJobResponse struct {
 	JobType     string        `json:"jobType"`
 	URLs        []string      `json:"urls,omitempty"`
 	Results     []BatchResult `json:"results,omitempty"`
+	Succeeded   int           `json:"succeeded"`
+	Failed      int           `json:"failed"`
 	CreatedAt   string        `json:"createdAt,omitempty"`
 	CompletedAt *string       `json:"completedAt,omitempty"`
 	DurationMs  *int          `json:"durationMs,omitempty"`
+}
+
+// DeriveBatchStatus derives a parent batch job's status from its children's
+// status counts. Every batch status derivation must go through here — the batch
+// handler and both stores each used to compute this separately, and none of them
+// considered `failed`, so a batch whose children had all failed reported
+// "completed". A batch is only "completed" if at least one child succeeded.
+func DeriveBatchStatus(total, pending, processing, failed int) string {
+	switch {
+	case total == 0:
+		return JobStatusPending
+	case pending == total:
+		return JobStatusPending
+	case pending > 0 || processing > 0:
+		return JobStatusProcessing
+	case failed == total:
+		return JobStatusFailed
+	default:
+		return JobStatusCompleted
+	}
 }
 
 // BatchResult is the result for a single URL within a batch job.
