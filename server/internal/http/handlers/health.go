@@ -25,8 +25,15 @@ func (h *HealthHandler) Health(c *fiber.Ctx) error {
 		dbOK = false
 	}
 
-	return c.JSON(fiber.Map{
-		"status":   "ok",
+	statusCode := fiber.StatusOK
+	status := "ok"
+	if !dbOK {
+		statusCode = fiber.StatusServiceUnavailable
+		status = "unhealthy"
+	}
+
+	return c.Status(statusCode).JSON(fiber.Map{
+		"status":   status,
 		"database": dbOK,
 		"service":  "anakinscraper",
 	})
