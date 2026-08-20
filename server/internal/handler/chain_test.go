@@ -2,7 +2,9 @@ package handler
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/Anakin-Inc/anakinscraper-oss/server/internal/models"
@@ -177,6 +179,55 @@ func TestChain_AllHandlersFailReturnsError(t *testing.T) {
 	}
 	if !h1.called || !h2.called {
 		t.Error("both handlers should have been called")
+	}
+}
+
+// The whole point of the aggregate: the first handler's diagnosis must survive
+// the second handler's failure, instead of being overwritten by it.
+func TestChain_ErrorNamesEveryFailedHandler(t *testing.T) {
+	http := &mockHandler{name: "http", canHandle: true, healthy: true, err: fmt.Errorf("HTTP 404: Not Found")}
+	browser := &mockHandler{name: "browser", canHandle: true, healthy: true, err: fmt.Errorf("connect ECONNREFUSED ::1:9222")}
+
+	chain := NewChain([]ScrapingHandler{http, browser})
+	_, err := chain.Execute(context.Background(), &models.HandlerRequest{URL: "https://example.com"})
+	if err == nil {
+		t.Fatal("expected error when all handlers fail, got nil")
+	}
+
+	msg := err.Error()
+	for _, want := range []string{"http: HTTP 404: Not Found", "browser: connect ECONNREFUSED ::1:9222"} {
+		if !strings.Contains(msg, want) {
+			t.Errorf("error %q does not mention %q", msg, want)
+		}
+	}
+	if !strings.HasPrefix(msg, "all handlers failed: ") {
+		t.Errorf("error %q lost the documented prefix", msg)
+	}
+}
+
+// hostedHint and the proxy pool both classify off the wrapped errors, so
+// unwrapping has to keep working through the aggregate.
+func TestChain_AggregateErrorSupportsErrorsIs(t *testing.T) {
+	sentinel := errors.New("HTTP 403: Forbidden")
+	h1 := &mockHandler{name: "http", canHandle: true, healthy: true, err: sentinel}
+	h2 := &mockHandler{name: "browser", canHandle: true, healthy: true, err: fmt.Errorf("navigation failed")}
+
+	chain := NewChain([]ScrapingHandler{h1, h2})
+	_, err := chain.Execute(context.Background(), &models.HandlerRequest{URL: "https://example.com"})
+	if !errors.Is(err, sentinel) {
+		t.Errorf("errors.Is could not reach the http handler error through %v", err)
+	}
+}
+
+func TestChain_NoEligibleHandlersIsNotAFailure(t *testing.T) {
+	skipped := &mockHandler{name: "browser", canHandle: false, healthy: true}
+	chain := NewChain([]ScrapingHandler{skipped})
+	_, err := chain.Execute(context.Background(), &models.HandlerRequest{URL: "https://example.com"})
+	if err == nil {
+		t.Fatal("expected an error, got nil")
+	}
+	if strings.Contains(err.Error(), "all handlers failed") {
+		t.Errorf("no handler ran, so %q should not claim handlers failed", err.Error())
 	}
 }
 

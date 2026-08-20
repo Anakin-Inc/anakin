@@ -6,10 +6,26 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/Anakin-Inc/anakinscraper-oss/server/internal/models"
 )
+
+// handlerErrors reports every attempted handler's failure as one
+// comma-separated message ("http: HTTP 403, browser: timeout") while keeping
+// each wrapped error reachable through errors.Is and errors.As.
+type handlerErrors []error
+
+func (e handlerErrors) Error() string {
+	msgs := make([]string, len(e))
+	for i, err := range e {
+		msgs[i] = err.Error()
+	}
+	return strings.Join(msgs, ", ")
+}
+
+func (e handlerErrors) Unwrap() []error { return e }
 
 // Chain orchestrates handler execution with fallback.
 type Chain struct {
@@ -27,7 +43,7 @@ func (c *Chain) Execute(ctx context.Context, req *models.HandlerRequest) (*model
 		return nil, fmt.Errorf("no handlers registered")
 	}
 
-	var lastErr error
+	var errs handlerErrors
 
 	for _, h := range c.handlers {
 		if len(req.AllowedHandlers) > 0 && !contains(req.AllowedHandlers, h.Name()) {
@@ -55,7 +71,7 @@ func (c *Chain) Execute(ctx context.Context, req *models.HandlerRequest) (*model
 				"duration_ms", elapsed.Milliseconds(),
 				"error", err,
 			)
-			lastErr = err
+			errs = append(errs, fmt.Errorf("%s: %w", h.Name(), err))
 			continue
 		}
 
@@ -71,10 +87,10 @@ func (c *Chain) Execute(ctx context.Context, req *models.HandlerRequest) (*model
 		return result, nil
 	}
 
-	if lastErr == nil {
-		lastErr = fmt.Errorf("no available handlers for request")
+	if len(errs) == 0 {
+		return nil, fmt.Errorf("no available handlers for request")
 	}
-	return nil, fmt.Errorf("all handlers failed: %w", lastErr)
+	return nil, fmt.Errorf("all handlers failed: %w", errs)
 }
 
 func contains(ss []string, s string) bool {
