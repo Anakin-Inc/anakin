@@ -143,10 +143,11 @@ func (h *ScraperHandler) ScrapeSync(c *fiber.Ctx) error {
 		case <-ticker.C:
 			j, err := h.store.GetJob(c.Context(), jobID)
 			if err != nil {
-				continue
-			}
-
-			if j.Status == models.JobStatusCompleted || j.Status == models.JobStatusFailed {
+				// A failing lookup must not skip the deadline check below,
+				// otherwise a store that stays unreachable keeps this handler
+				// polling forever and the request never returns.
+				slog.Warn("sync scrape poll failed", "jobId", jobID, "error", err)
+			} else if j.Status == models.JobStatusCompleted || j.Status == models.JobStatusFailed {
 				resp := models.JobResponse{
 					ID: jobID, Status: j.Status, URL: req.URL, JobType: models.JobTypeURLScraper,
 					CreatedAt: now.Format(time.RFC3339),
@@ -182,7 +183,9 @@ func (h *ScraperHandler) ScrapeSync(c *fiber.Ctx) error {
 				})
 			}
 		case <-c.Context().Done():
-			// Client disconnected
+			// Server shutting down. fasthttp shares one done channel per server
+			// rather than per connection, so this does not fire on client
+			// disconnect — the deadline above is what bounds this loop.
 			return nil
 		}
 	}

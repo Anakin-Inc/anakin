@@ -4,6 +4,7 @@
 
 ### Fixed
 - **Proxy latency tracking** — the average latency EMA now seeds with the first observed sample instead of blending it against a zero baseline, which had caused a proxy's first request to be recorded at ~20% of its true latency (`server/internal/proxy/pool.go`)
+- **Sync scrape never timed out when the store was unreachable** — a failed poll in `ScrapeSync` hit a `continue` that skipped the deadline check, so a store that stayed down kept the handler polling forever and the request never returned, regardless of the configured `timeout`. The deadline is now evaluated on every tick and the failed lookup is logged (`server/internal/http/handlers/scraper.go`)
 
 ## v0.1.1 (2026-03-20)
 
