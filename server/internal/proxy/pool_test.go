@@ -39,3 +39,42 @@ func TestRecordSuccess_ZeroLatencyDoesNotSeed(t *testing.T) {
 		t.Errorf("Alpha = %d, want 2 (started at 1, +1 success)", sc.Alpha)
 	}
 }
+
+func TestSelectProxy_ConcurrentAccess(t *testing.T) {
+	proxies := []string{"http://proxy1:8080", "http://proxy2:8080", "http://proxy3:8080"}
+	p := NewPool(nil, proxies)
+
+	done := make(chan bool)
+	hosts := []string{"example.com", "api.github.com", "google.com"}
+
+	// Spawn concurrent readers
+	for i := 0; i < 10; i++ {
+		go func(idx int) {
+			for j := 0; j < 100; j++ {
+				host := hosts[j%len(hosts)]
+				_ = p.SelectProxy(host)
+			}
+			done <- true
+		}(i)
+	}
+
+	// Spawn concurrent writers
+	for i := 0; i < 5; i++ {
+		go func(idx int) {
+			for j := 0; j < 100; j++ {
+				host := hosts[j%len(hosts)]
+				px := proxies[j%len(proxies)]
+				if j%2 == 0 {
+					p.RecordSuccess(px, host, 500)
+				} else {
+					p.RecordFailure(px, host, j%4 == 1)
+				}
+			}
+			done <- true
+		}(i)
+	}
+
+	for i := 0; i < 15; i++ {
+		<-done
+	}
+}

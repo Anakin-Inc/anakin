@@ -76,9 +76,10 @@ func (p *Pool) SelectProxy(targetHost string) string {
 	}
 
 	p.mu.RLock()
+	defer p.mu.RUnlock()
+
 	hostScores := p.scores[targetHost]
 	hostBlocked := p.blocked[targetHost]
-	p.mu.RUnlock()
 
 	now := time.Now()
 	candidates := make([]*Score, 0, len(p.proxies))
