@@ -81,10 +81,12 @@ func extractMainContent(doc *goquery.Document) string {
 }
 
 func resolveURLs(doc *goquery.Document, pageURL string) {
-	base, err := url.Parse(pageURL)
+	page, err := url.Parse(pageURL)
 	if err != nil {
 		return
 	}
+
+	base := documentBase(doc, page)
 
 	doc.Find("a[href]").Each(func(_ int, s *goquery.Selection) {
 		href, exists := s.Attr("href")
@@ -105,6 +107,27 @@ func resolveURLs(doc *goquery.Document, pageURL string) {
 			s.SetAttr("src", resolved)
 		}
 	})
+}
+
+// documentBase returns the URL that relative references in the document resolve
+// against. That is the page URL, unless the document carries a <base href> — the
+// element exists precisely to override it, and browsers honour the first one with
+// an href. A base href may itself be relative, so it is resolved against the page
+// URL before being used.
+func documentBase(doc *goquery.Document, page *url.URL) *url.URL {
+	href, exists := doc.Find("base[href]").First().Attr("href")
+	if !exists {
+		return page
+	}
+	href = strings.TrimSpace(href)
+	if href == "" {
+		return page
+	}
+	ref, err := url.Parse(href)
+	if err != nil {
+		return page
+	}
+	return page.ResolveReference(ref)
 }
 
 func resolveURL(base *url.URL, rawRef string) string {
