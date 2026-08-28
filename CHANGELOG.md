@@ -3,6 +3,7 @@
 ## Unreleased
 
 ### Fixed
+- **Proxy connections are never reused** — the HTTP handler built a fresh `http.Transport` for every proxied scrape, so each one opened a new connection to the proxy and abandoned the previous transport with its sockets still idling; proxy clients are now cached per proxy URL, and an unparseable proxy URL fails instead of silently falling back to a direct fetch (`server/internal/handler/http.go`)
 - **Proxy latency tracking** — the average latency EMA now seeds with the first observed sample instead of blending it against a zero baseline, which had caused a proxy's first request to be recorded at ~20% of its true latency (`server/internal/proxy/pool.go`)
 
 ## v0.1.1 (2026-03-20)
