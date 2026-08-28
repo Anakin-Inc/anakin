@@ -3,6 +3,8 @@
 ## Unreleased
 
 ### Fixed
+- **Relative `srcset` and `<source>` URLs** — the markdown converter resolved only `a[href]` and `img[src]`, leaving every `srcset` candidate and every `<source>` in a `<picture>`, `<video>` or `<audio>` element as a relative path in the returned `cleanedHtml` (`server/internal/converter/markdown.go`)
+- **Relative links on pages with `<base href>`** — the markdown converter resolved relative `href`/`src` values against the page URL and ignored the document's `<base href>`, so every link and image scraped from a page that sets one came out pointing at the wrong host or path (`server/internal/converter/markdown.go`)
 - **Proxy latency tracking** — the average latency EMA now seeds with the first observed sample instead of blending it against a zero baseline, which had caused a proxy's first request to be recorded at ~20% of its true latency (`server/internal/proxy/pool.go`)
 
 ## v0.1.1 (2026-03-20)
