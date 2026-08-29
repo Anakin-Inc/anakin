@@ -87,7 +87,7 @@ func (s *PostgresStore) GetChildJobs(ctx context.Context, parentJobID string) ([
 			durationMs sql.NullInt64
 		)
 		if err := rows.Scan(&j.ID, &j.URL, &j.Status, &errorMsg, &result, &durationMs); err != nil {
-			continue
+			return nil, fmt.Errorf("scan child job: %w", err)
 		}
 		if errorMsg.Valid {
 			j.Error = errorMsg.String
@@ -99,6 +99,9 @@ func (s *PostgresStore) GetChildJobs(ctx context.Context, parentJobID string) ([
 			j.DurationMs = int(durationMs.Int64)
 		}
 		jobs = append(jobs, j)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate child jobs: %w", err)
 	}
 	return jobs, nil
 }
