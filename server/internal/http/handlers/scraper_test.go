@@ -3,8 +3,17 @@
 package handlers
 
 import (
+	"context"
+	"errors"
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
+
+	"github.com/gofiber/fiber/v2"
+
+	"github.com/Anakin-Inc/anakinscraper-oss/server/internal/store"
 )
 
 func TestScrapeSyncTimeout(t *testing.T) {
@@ -44,5 +53,76 @@ func TestScrapeSyncTimeout(t *testing.T) {
 				t.Errorf("resolveTimeout(%d) = %v, want %v", tt.input, got, tt.expected)
 			}
 		})
+	}
+}
+
+type failingBatchStore struct {
+	batchCalls      int
+	individualCalls int
+}
+
+func (s *failingBatchStore) CreateJob(context.Context, store.JobRecord) error {
+	s.individualCalls++
+	return nil
+}
+
+func (s *failingBatchStore) CreateBatchJobs(context.Context, store.JobRecord, []store.JobRecord) error {
+	s.batchCalls++
+	return errors.New("simulated child insert failure")
+}
+
+func (*failingBatchStore) GetJob(context.Context, string) (*store.JobRecord, error) {
+	return nil, errors.New("not implemented")
+}
+
+func (*failingBatchStore) GetChildJobs(context.Context, string) ([]store.JobRecord, error) {
+	return nil, errors.New("not implemented")
+}
+
+func (*failingBatchStore) UpdateStatus(context.Context, string, string, *string, *int) error {
+	return errors.New("not implemented")
+}
+
+func (*failingBatchStore) UpdateCompleted(context.Context, string, int, int) error {
+	return errors.New("not implemented")
+}
+
+func (*failingBatchStore) StoreResult(context.Context, string, string) error {
+	return errors.New("not implemented")
+}
+
+func (*failingBatchStore) UpdateParentBatchStatus(context.Context, string) error {
+	return errors.New("not implemented")
+}
+
+func (*failingBatchStore) Ping(context.Context) error {
+	return nil
+}
+
+func TestCreateBatchJobReturnsErrorWhenAtomicInsertFails(t *testing.T) {
+	jobStore := &failingBatchStore{}
+	app := fiber.New()
+	app.Post("/v1/url-scraper/batch", NewScraperHandler(jobStore, nil).CreateBatchJob)
+
+	req := httptest.NewRequest(
+		http.MethodPost,
+		"/v1/url-scraper/batch",
+		strings.NewReader(`{"urls":["https://example.com/one","https://example.com/two"]}`),
+	)
+	req.Header.Set("Content-Type", "application/json")
+	res, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer res.Body.Close()
+
+	if res.StatusCode != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want %d", res.StatusCode, http.StatusInternalServerError)
+	}
+	if jobStore.batchCalls != 1 {
+		t.Fatalf("CreateBatchJobs calls = %d, want 1", jobStore.batchCalls)
+	}
+	if jobStore.individualCalls != 0 {
+		t.Fatalf("individual CreateJob calls = %d, want 0", jobStore.individualCalls)
 	}
 }

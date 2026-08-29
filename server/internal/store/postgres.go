@@ -32,6 +32,33 @@ func (s *PostgresStore) CreateJob(ctx context.Context, job JobRecord) error {
 	return err
 }
 
+func (s *PostgresStore) CreateBatchJobs(ctx context.Context, parent JobRecord, children []JobRecord) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	insert := func(job JobRecord) error {
+		_, err := tx.ExecContext(ctx,
+			`INSERT INTO scrape_requests (id, job_type, url, status, country, payload, force_fresh, parent_job_id)
+			 VALUES ($1, $2, $3, 'pending', $4, $5, $6, $7)`,
+			job.ID, job.JobType, job.URL, job.Country, job.Payload, job.ForceFresh, nilIfEmpty(job.ParentJobID))
+		return err
+	}
+
+	if err := insert(parent); err != nil {
+		return err
+	}
+	for _, child := range children {
+		if err := insert(child); err != nil {
+			return err
+		}
+	}
+
+	return tx.Commit()
+}
+
 func (s *PostgresStore) GetJob(ctx context.Context, id string) (*JobRecord, error) {
 	var (
 		j           JobRecord

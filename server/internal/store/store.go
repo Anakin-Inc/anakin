@@ -42,6 +42,9 @@ type JobStore interface {
 	// CreateJob inserts a new job.
 	CreateJob(ctx context.Context, job JobRecord) error
 
+	// CreateBatchJobs atomically inserts a batch parent and all of its children.
+	CreateBatchJobs(ctx context.Context, parent JobRecord, children []JobRecord) error
+
 	// GetJob returns a job by ID.
 	GetJob(ctx context.Context, id string) (*JobRecord, error)
 
