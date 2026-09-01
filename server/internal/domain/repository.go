@@ -75,10 +75,13 @@ func (r *Repository) Create(ctx context.Context, cfg *DomainConfig) error {
 	).Scan(&cfg.ID)
 }
 
+// Update writes cfg over the row for cfg.Domain. It returns sql.ErrNoRows when no
+// such row exists, so a PUT to an unknown domain is reported as a miss instead of
+// succeeding against nothing.
 func (r *Repository) Update(ctx context.Context, cfg *DomainConfig) error {
 	now := time.Now().UTC()
 	cfg.UpdatedAt = now
-	_, err := r.db.ExecContext(ctx,
+	res, err := r.db.ExecContext(ctx,
 		`UPDATE domain_configs SET
 		    is_enabled=$1, match_subdomains=$2, priority=$3,
 		    handler_chain=$4, request_timeout_ms=$5, max_retries=$6,
@@ -93,7 +96,20 @@ func (r *Repository) Update(ctx context.Context, cfg *DomainConfig) error {
 		cfg.Blocked, nullString(cfg.BlockedReason), nullString(cfg.Notes),
 		now, cfg.Domain,
 	)
-	return err
+	if err != nil {
+		return err
+	}
+
+	// A driver is allowed not to support RowsAffected; treat that as "cannot tell"
+	// and keep the previous behaviour rather than inventing a miss.
+	affected, err := res.RowsAffected()
+	if err != nil {
+		return nil
+	}
+	if affected == 0 {
+		return sql.ErrNoRows
+	}
+	return nil
 }
 
 func (r *Repository) Delete(ctx context.Context, domain string) error {
