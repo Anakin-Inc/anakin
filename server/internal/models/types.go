@@ -128,6 +128,12 @@ type HandlerRequest struct {
 	AllowedHandlers []string          // If set, only these handlers are tried
 	CustomHeaders   map[string]string // Per-request custom headers
 	CustomUserAgent string            // Per-request user-agent override
+
+	// Validate, when set, inspects a handler's result before the chain accepts it.
+	// Returning an error rejects that result and the chain moves on to the next
+	// handler, which is how per-domain failure detection (CAPTCHA pages, login
+	// walls) reaches the fallback handlers instead of accepting the first HTTP 200.
+	Validate func(*ScrapeResult) error
 }
 
 // ScrapeResult holds the output from a scraping handler.
