@@ -3,6 +3,7 @@
 ## Unreleased
 
 ### Fixed
+- **Domain config patterns containing commas** — `failurePatterns` and `requiredPatterns` were stored comma-joined in a `TEXT` column and split back on `,`, so any regex with a quantifier such as `captcha.{0,50}` was torn into two broken patterns on the next read; failure detection then silently stopped firing for that domain. The list columns now round-trip as JSON, and legacy comma-joined rows are still read (`server/internal/domain/repository.go`)
 - **Proxy latency tracking** — the average latency EMA now seeds with the first observed sample instead of blending it against a zero baseline, which had caused a proxy's first request to be recorded at ~20% of its true latency (`server/internal/proxy/pool.go`)
 
 ## v0.1.1 (2026-03-20)
