@@ -4,6 +4,7 @@ package domain
 
 import (
 	"fmt"
+	"log/slog"
 	"regexp"
 	"strings"
 )
@@ -41,6 +42,10 @@ func (d *Detector) Check(cfg *DomainConfig, html string) *DetectionResult {
 		}
 		re, err := regexp.Compile(pattern)
 		if err != nil {
+			// New configs are rejected by DomainConfig.Validate, but rows written
+			// before that check exist. Say so instead of silently not matching.
+			slog.Warn("skipping failure pattern that does not compile",
+				"domain", cfg.Domain, "pattern", pattern, "error", err)
 			continue
 		}
 		if re.MatchString(html) {
@@ -61,6 +66,8 @@ func (d *Detector) Check(cfg *DomainConfig, html string) *DetectionResult {
 			}
 			re, err := regexp.Compile(pattern)
 			if err != nil {
+				slog.Warn("skipping required pattern that does not compile",
+					"domain", cfg.Domain, "pattern", pattern, "error", err)
 				continue
 			}
 			if re.MatchString(html) {

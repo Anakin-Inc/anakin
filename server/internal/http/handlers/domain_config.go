@@ -3,6 +3,7 @@
 package handlers
 
 import (
+	"context"
 	"database/sql"
 
 	"github.com/gofiber/fiber/v2"
@@ -12,8 +13,18 @@ import (
 	"github.com/Anakin-Inc/anakinscraper-oss/server/internal/proxy"
 )
 
+// configRepository is the part of *domain.Repository these routes use. It is an
+// interface so the request handling can be exercised without a database.
+type configRepository interface {
+	GetAll(ctx context.Context) ([]*domain.DomainConfig, error)
+	GetByDomain(ctx context.Context, domainName string) (*domain.DomainConfig, error)
+	Create(ctx context.Context, cfg *domain.DomainConfig) error
+	Update(ctx context.Context, cfg *domain.DomainConfig) error
+	Delete(ctx context.Context, domainName string) error
+}
+
 type DomainConfigHandler struct {
-	repo *domain.Repository
+	repo configRepository
 }
 
 func NewDomainConfigHandler(db *sql.DB) *DomainConfigHandler {
@@ -70,6 +81,11 @@ func (h *DomainConfigHandler) Create(c *fiber.Ctx) error {
 	if cfg.MaxRetries == 0 {
 		cfg.MaxRetries = 2
 	}
+	if err := cfg.Validate(); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(models.ErrorResponse{
+			Error: "invalid_request", Message: err.Error(),
+		})
+	}
 
 	if err := h.repo.Create(c.Context(), &cfg); err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(models.ErrorResponse{
@@ -88,8 +104,19 @@ func (h *DomainConfigHandler) Update(c *fiber.Ctx) error {
 		})
 	}
 	cfg.Domain = domainName
+	if err := cfg.Validate(); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(models.ErrorResponse{
+			Error: "invalid_request", Message: err.Error(),
+		})
+	}
 
-	if err := h.repo.Update(c.Context(), &cfg); err != nil {
+	err := h.repo.Update(c.Context(), &cfg)
+	if err == sql.ErrNoRows {
+		return c.Status(fiber.StatusNotFound).JSON(models.ErrorResponse{
+			Error: "not_found", Message: "Domain config not found",
+		})
+	}
+	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(models.ErrorResponse{
 			Error: "internal_error", Message: "Failed to update domain config",
 		})
