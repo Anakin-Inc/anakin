@@ -3,6 +3,7 @@
 ## Unreleased
 
 ### Fixed
+- **Custom handler example now compiles** — `examples/custom-handler` could not build: Go forbids importing `server/internal/...` from outside `server/`, and its `handler.NewHTTPHandler` call still passed the pre-SSRF-guard two-argument signature. Moved to `server/examples/custom-handler`, where `go build ./...` covers it (`server/examples/custom-handler/`)
 - **Proxy latency tracking** — the average latency EMA now seeds with the first observed sample instead of blending it against a zero baseline, which had caused a proxy's first request to be recorded at ~20% of its true latency (`server/internal/proxy/pool.go`)
 
 ## v0.1.1 (2026-03-20)

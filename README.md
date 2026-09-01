@@ -250,7 +250,7 @@ type ScrapingHandler interface {
 }
 ```
 
-See [examples/custom-handler/](examples/custom-handler/).
+See [server/examples/custom-handler/](server/examples/custom-handler/).
 
 ## Configuration
 

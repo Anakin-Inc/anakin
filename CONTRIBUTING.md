@@ -46,7 +46,7 @@ type ScrapingHandler interface {
 3. Register your handler in the chain in `server/cmd/server/main.go`
 4. The handler's position in the chain determines fallback priority
 
-See [examples/custom-handler/](examples/custom-handler/) for a working example.
+See [server/examples/custom-handler/](server/examples/custom-handler/) for a working example.
 
 ## Running Tests
 
