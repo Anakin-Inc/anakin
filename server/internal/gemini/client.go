@@ -21,6 +21,10 @@ import (
 type Client struct {
 	enabled bool
 	apiKey  string
+
+	// baseURL overrides the Gemini endpoint. Empty means defaultBaseURL; it exists
+	// so tests can point the client at an httptest server.
+	baseURL string
 }
 
 // TokenUsage tracks Gemini API token consumption.
@@ -53,7 +57,13 @@ const (
 	defaultMaxOutputTokens        = 8192
 	productListingMaxOutputTokens = 65535
 
-	defaultModel = "gemini-2.5-flash"
+	defaultModel   = "gemini-2.5-flash"
+	defaultBaseURL = "https://generativelanguage.googleapis.com"
+
+	// apiKeyHeader is Google's documented header for the API key. Passing the key
+	// this way instead of as a ?key= query parameter keeps it out of the request
+	// URL — see generateContentURL.
+	apiKeyHeader = "x-goog-api-key"
 
 	productListingTimeout = 120 * time.Second
 	defaultTimeout        = 60 * time.Second
@@ -247,6 +257,22 @@ func (c *Client) extractFromChunks(ctx context.Context, markdown string, url str
 	return &s, &totalUsage, nil
 }
 
+// generateContentURL builds the generateContent endpoint for the configured model.
+//
+// The API key is deliberately absent from this URL. net/http records the request URL
+// on every *url.Error it returns, and it redacts only userinfo, not the query string.
+// A key passed as ?key=... therefore travels inside the transport error, which
+// ExtractJSONFromMarkdown wraps and the processor logs verbatim — one unreachable
+// endpoint or one DNS hiccup was enough to write the operator's GEMINI_API_KEY into
+// the server log. The key goes in the apiKeyHeader header instead.
+func (c *Client) generateContentURL() string {
+	base := c.baseURL
+	if base == "" {
+		base = defaultBaseURL
+	}
+	return fmt.Sprintf("%s/v1beta/models/%s:generateContent", strings.TrimSuffix(base, "/"), defaultModel)
+}
+
 // callGeminiAPI calls the Gemini REST API directly.
 // Returns: jsonText, tokenUsage, wasTruncated, error
 func (c *Client) callGeminiAPI(ctx context.Context, prompt string, maxOutputTokens int) (string, *TokenUsage, bool, error) {
@@ -279,12 +305,12 @@ func (c *Client) callGeminiAPI(ctx context.Context, prompt string, maxOutputToke
 		return "", nil, false, fmt.Errorf("failed to marshal request: %w", err)
 	}
 
-	url := fmt.Sprintf("https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent?key=%s", defaultModel, c.apiKey)
-	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(body))
+	req, err := http.NewRequestWithContext(ctx, "POST", c.generateContentURL(), bytes.NewBuffer(body))
 	if err != nil {
 		return "", nil, false, fmt.Errorf("failed to create request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set(apiKeyHeader, c.apiKey)
 
 	resp, err := (&http.Client{}).Do(req)
 	if err != nil {
