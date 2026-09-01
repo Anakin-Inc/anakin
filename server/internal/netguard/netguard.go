@@ -24,17 +24,55 @@ import (
 	"syscall"
 )
 
+// blockedNets holds ranges that are not routable public destinations but that none
+// of the net.IP predicates classify. net.IP.IsPrivate covers only RFC 1918 and
+// fc00::/7, so every other IANA special-purpose allocation has to be listed.
+//
+// IPNet.Contains normalises an IPv4-mapped IPv6 address before testing, so
+// ::ffff:100.100.100.200 matches the 100.64.0.0/10 entry too.
+var blockedNets = []*net.IPNet{
+	// RFC 6598 shared address space, used for carrier-grade NAT. Alibaba Cloud's
+	// instance metadata endpoint, 100.100.100.200, sits in here — the same class of
+	// target as 169.254.169.254, which is already blocked.
+	mustCIDR("100.64.0.0/10"),
+	// RFC 6890 IETF protocol assignments.
+	mustCIDR("192.0.0.0/24"),
+	// RFC 2544 benchmarking range, routed internally on some networks.
+	mustCIDR("198.18.0.0/15"),
+	// RFC 1112 reserved space, which also covers the 255.255.255.255 broadcast
+	// address — IsMulticast only spans 224.0.0.0/4.
+	mustCIDR("240.0.0.0/4"),
+}
+
+func mustCIDR(s string) *net.IPNet {
+	_, n, err := net.ParseCIDR(s)
+	if err != nil {
+		panic("netguard: bad CIDR " + s + ": " + err.Error())
+	}
+	return n
+}
+
 // Blocked reports whether ip is in a range a scrape target must never reach:
 // loopback, private (RFC1918 and fc00::/7), link-local (which covers the
-// 169.254.169.254 cloud metadata endpoint), unspecified, or multicast.
+// 169.254.169.254 cloud metadata endpoint), unspecified, multicast, or one of the
+// special-purpose ranges in blockedNets.
 func Blocked(ip net.IP) bool {
-	return ip.IsLoopback() ||
+	if ip.IsLoopback() ||
 		ip.IsPrivate() ||
 		ip.IsLinkLocalUnicast() ||
 		ip.IsLinkLocalMulticast() ||
 		ip.IsInterfaceLocalMulticast() ||
 		ip.IsMulticast() ||
-		ip.IsUnspecified()
+		ip.IsUnspecified() {
+		return true
+	}
+
+	for _, n := range blockedNets {
+		if n.Contains(ip) {
+			return true
+		}
+	}
+	return false
 }
 
 // ValidateHost rejects a hostname or IP literal that points at a blocked address.
