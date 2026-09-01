@@ -3,6 +3,7 @@
 package telemetry
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -289,7 +290,7 @@ func TestTrySend_Success(t *testing.T) {
 	c.scrapeSync.Store(10)
 	c.statusSuccess.Store(10)
 
-	c.trySend()
+	c.trySend(context.Background())
 
 	if c.sendCount.Load() != 1 {
 		t.Errorf("expected sendCount=1, got %d", c.sendCount.Load())
@@ -324,7 +325,7 @@ func TestTrySend_SkipsEmptyPayload(t *testing.T) {
 	}
 	// All counters are zero
 
-	c.trySend()
+	c.trySend(context.Background())
 
 	if called.Load() {
 		t.Error("expected no HTTP call for empty payload")
@@ -348,7 +349,7 @@ func TestTrySend_NoRetryOn4xx(t *testing.T) {
 	}
 	c.scrapeSync.Store(5)
 
-	c.trySend()
+	c.trySend(context.Background())
 
 	if callCount.Load() != 1 {
 		t.Errorf("expected exactly 1 call for 4xx (no retry), got %d", callCount.Load())
@@ -372,7 +373,7 @@ func TestTrySend_RetriesOn5xx(t *testing.T) {
 	}
 	c.scrapeSync.Store(5)
 
-	c.trySend()
+	c.trySend(context.Background())
 
 	// 1 initial + 2 retries = 3 total
 	if callCount.Load() != 3 {
@@ -542,5 +543,69 @@ func TestTelemetryDisabledNoOutbound(t *testing.T) {
 	}
 	if called.Load() {
 		t.Error("expected no outbound HTTP calls when telemetry is disabled")
+	}
+}
+
+func TestStop_BoundedWhenEndpointHangs(t *testing.T) {
+	release := make(chan struct{})
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		select {
+		case <-release:
+		case <-r.Context().Done():
+		}
+	}))
+	defer server.Close()
+	defer close(release)
+
+	c := New(nil, true, server.URL, false, 0)
+	c.Record(Event{Endpoint: "scrape_sync", Status: "success", DurationMs: 1})
+
+	start := time.Now()
+	c.Stop()
+	elapsed := time.Since(start)
+
+	// The final send must be bounded by the shutdown budget, not by the retry
+	// schedule (3 attempts x sendTimeout + 2 x retryDelay = ~25s).
+	select {
+	case <-c.done:
+	default:
+		t.Fatalf("Stop returned after %v but the collector goroutine is still sending", elapsed)
+	}
+	if elapsed > shutdownGrace {
+		t.Errorf("Stop took %v, want it bounded by the %v shutdown grace", elapsed, shutdownGrace)
+	}
+}
+
+func TestTrySend_AbortsRetryBackoffWhenContextDone(t *testing.T) {
+	var callCount atomic.Int64
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		callCount.Add(1)
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer server.Close()
+
+	c := &Collector{
+		enabled:     true,
+		instanceID:  "test-uuid",
+		endpointURL: server.URL,
+		startedAt:   time.Now(),
+		client:      server.Client(),
+	}
+	c.scrapeSync.Store(5)
+
+	// Expires well inside retryDelay, so the backoff after the first 5xx is what
+	// has to notice the cancellation.
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+
+	start := time.Now()
+	c.trySend(ctx)
+	elapsed := time.Since(start)
+
+	if callCount.Load() != 1 {
+		t.Errorf("expected 1 call before the expired context stopped the retries, got %d", callCount.Load())
+	}
+	if elapsed >= retryDelay {
+		t.Errorf("trySend blocked for %v on a done context, want it to give up before retryDelay (%v)", elapsed, retryDelay)
 	}
 }
