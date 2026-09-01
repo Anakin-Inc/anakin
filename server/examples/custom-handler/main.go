@@ -4,9 +4,12 @@
 // local directory, falling back to the built-in HTTP handler for any URL that
 // isn't cached locally.
 //
+// The example lives inside the server module because it imports server/internal/...,
+// which Go only permits for code rooted at server/.
+//
 // To run this example:
 //
-//	cd server && go run ../examples/custom-handler/main.go
+//	cd server && go run ./examples/custom-handler https://example.com
 package main
 
 import (
@@ -83,8 +86,9 @@ func main() {
 	// Your custom handler — checked first
 	cachedHandler := NewCachedHTMLHandler("./cached-pages")
 
-	// Built-in HTTP handler as fallback
-	httpHandler := handler.NewHTTPHandler(30*time.Second, "")
+	// Built-in HTTP handler as fallback. The third argument keeps the SSRF guard on,
+	// so the handler refuses to dial loopback, private and link-local addresses.
+	httpHandler := handler.NewHTTPHandler(30*time.Second, "", false)
 
 	// Build the chain: cached-html → http → (browser)
 	chain := handler.NewChain([]handler.ScrapingHandler{
