@@ -193,9 +193,12 @@ func main() {
 		slog.Error("server shutdown error", "error", err)
 	}
 
-	// Drain worker pool (finish in-flight jobs)
+	// Drain worker pool (finish in-flight jobs) before cancelling the context those
+	// jobs run on, bounded by the shutdown budget.
+	if !drainWorkers(shutdownCtx, pool) {
+		slog.Warn("shutdown budget expired with jobs still in flight, cancelling them")
+	}
 	bgCancel()
-	pool.Drain()
 
 	// Cleanup
 	tel.Stop()
@@ -208,6 +211,29 @@ func main() {
 	browserHandler.Stop()
 
 	slog.Info("server stopped")
+}
+
+// drainWorkers waits for queued and in-flight jobs to finish, and reports whether they
+// all did before ctx expired.
+//
+// The wait has to happen before bgCancel(). Worker job contexts descend from the
+// context passed to pool.Start, so cancelling it first kills every job the pool is
+// still holding — the in-flight ones and everything left in the buffer — and each is
+// recorded as failed rather than finished. Draining first gives them the shutdown
+// budget to complete; cancelling afterwards is what stops anything that overruns it.
+func drainWorkers(ctx context.Context, pool *worker.Pool) bool {
+	drained := make(chan struct{})
+	go func() {
+		pool.Drain()
+		close(drained)
+	}()
+
+	select {
+	case <-drained:
+		return true
+	case <-ctx.Done():
+		return false
+	}
 }
 
 func storageMode(db *sql.DB) string {
