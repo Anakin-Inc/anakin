@@ -3,6 +3,7 @@
 ## Unreleased
 
 ### Fixed
+- **`PROXY_URLS` now works without `DATABASE_URL`** — the proxy pool was only created when PostgreSQL was configured, so in zero-config mode a configured proxy pool was silently ignored and every request went direct. PostgreSQL remains optional and only persists scores across restarts (`server/cmd/server/main.go`)
 - **Proxy latency tracking** — the average latency EMA now seeds with the first observed sample instead of blending it against a zero baseline, which had caused a proxy's first request to be recorded at ~20% of its true latency (`server/internal/proxy/pool.go`)
 
 ## v0.1.1 (2026-03-20)
