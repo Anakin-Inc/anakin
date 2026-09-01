@@ -135,6 +135,27 @@ func (p *Processor) processScrapeJob(ctx context.Context, msg models.JobMessage,
 		req.ProxyURL = p.proxyPool.SelectProxy(targetHost)
 	}
 
+	// Content validation runs inside the chain so that a rejected page (CAPTCHA,
+	// login wall, empty shell) falls through to the next handler. Checking it out
+	// here instead would only ever re-run the handler that produced the bad page.
+	var lastDetection *domain.DetectionResult
+	if domainCfg != nil && p.detector != nil {
+		cfg := domainCfg
+		req.Validate = func(r *models.ScrapeResult) error {
+			detection := p.detector.Check(cfg, r.HTML)
+			if !detection.Failed {
+				lastDetection = nil
+				return nil
+			}
+			lastDetection = detection
+			slog.Warn("content validation failed",
+				"job_id", msg.JobID,
+				"reason", detection.Reason,
+			)
+			return fmt.Errorf("content validation: %s", detection.Reason)
+		}
+	}
+
 	// Execute with retries
 	maxRetries := 1
 	if domainCfg != nil && domainCfg.MaxRetries > 0 {
@@ -152,25 +173,12 @@ func (p *Processor) processScrapeJob(ctx context.Context, msg models.JobMessage,
 		result, err = p.chain.Execute(ctx, req)
 		if err != nil {
 			lastErr = err
-			continue
-		}
-
-		// Content validation via failure detector
-		if domainCfg != nil && p.detector != nil {
-			detection := p.detector.Check(domainCfg, result.HTML)
-			if detection.Failed {
-				slog.Warn("content validation failed",
-					"job_id", msg.JobID,
-					"reason", detection.Reason,
-					"attempt", attempt,
-				)
-				if detection.ShouldRetry {
-					lastErr = fmt.Errorf("content validation: %s", detection.Reason)
-					continue
-				}
-				lastErr = fmt.Errorf("content validation: %s", detection.Reason)
+			// Every handler rejected the content and the detector says not to retry;
+			// running the same chain again would produce the same pages.
+			if lastDetection != nil && !lastDetection.ShouldRetry {
 				break
 			}
+			continue
 		}
 
 		// Success
