@@ -67,8 +67,8 @@ func (r *Repository) Create(ctx context.Context, cfg *DomainConfig) error {
 		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
 		 RETURNING id`,
 		cfg.Domain, cfg.IsEnabled, cfg.MatchSubdomains, cfg.Priority,
-		joinStrings(cfg.HandlerChain), cfg.RequestTimeoutMs, cfg.MaxRetries,
-		cfg.MinContentLength, joinStrings(cfg.FailurePatterns), joinStrings(cfg.RequiredPatterns),
+		encodeList(cfg.HandlerChain), cfg.RequestTimeoutMs, cfg.MaxRetries,
+		cfg.MinContentLength, encodeList(cfg.FailurePatterns), encodeList(cfg.RequiredPatterns),
 		marshalHeaders(cfg.CustomHeaders), nullString(cfg.CustomUserAgent), nullString(cfg.ProxyURL),
 		cfg.Blocked, nullString(cfg.BlockedReason), nullString(cfg.Notes),
 		now, now,
@@ -87,8 +87,8 @@ func (r *Repository) Update(ctx context.Context, cfg *DomainConfig) error {
 		    blocked=$13, blocked_reason=$14, notes=$15, updated_at=$16
 		 WHERE domain=$17`,
 		cfg.IsEnabled, cfg.MatchSubdomains, cfg.Priority,
-		joinStrings(cfg.HandlerChain), cfg.RequestTimeoutMs, cfg.MaxRetries,
-		cfg.MinContentLength, joinStrings(cfg.FailurePatterns), joinStrings(cfg.RequiredPatterns),
+		encodeList(cfg.HandlerChain), cfg.RequestTimeoutMs, cfg.MaxRetries,
+		cfg.MinContentLength, encodeList(cfg.FailurePatterns), encodeList(cfg.RequiredPatterns),
 		marshalHeaders(cfg.CustomHeaders), nullString(cfg.CustomUserAgent), nullString(cfg.ProxyURL),
 		cfg.Blocked, nullString(cfg.BlockedReason), nullString(cfg.Notes),
 		now, cfg.Domain,
@@ -117,9 +117,9 @@ func scanConfig(rows *sql.Rows) (*DomainConfig, error) {
 	if err != nil {
 		return nil, err
 	}
-	cfg.HandlerChain = splitStrings(chain)
-	cfg.FailurePatterns = splitStrings(failPat)
-	cfg.RequiredPatterns = splitStrings(reqPat)
+	cfg.HandlerChain = decodeList(chain)
+	cfg.FailurePatterns = decodeList(failPat)
+	cfg.RequiredPatterns = decodeList(reqPat)
 	cfg.CustomHeaders = unmarshalHeaders(headers)
 	cfg.CustomUserAgent = userAgent.String
 	cfg.ProxyURL = proxyURL.String
@@ -142,9 +142,9 @@ func scanConfigRow(row *sql.Row) (*DomainConfig, error) {
 	if err != nil {
 		return nil, err
 	}
-	cfg.HandlerChain = splitStrings(chain)
-	cfg.FailurePatterns = splitStrings(failPat)
-	cfg.RequiredPatterns = splitStrings(reqPat)
+	cfg.HandlerChain = decodeList(chain)
+	cfg.FailurePatterns = decodeList(failPat)
+	cfg.RequiredPatterns = decodeList(reqPat)
 	cfg.CustomHeaders = unmarshalHeaders(headers)
 	cfg.CustomUserAgent = userAgent.String
 	cfg.ProxyURL = proxyURL.String
@@ -153,21 +153,62 @@ func scanConfigRow(row *sql.Row) (*DomainConfig, error) {
 	return &cfg, nil
 }
 
-func joinStrings(s []string) string {
-	return strings.Join(s, ",")
+// encodeList serialises a string list for a TEXT column as a JSON array.
+//
+// The list columns hold regexes (failure_patterns, required_patterns), and a comma
+// is an ordinary regex character — `captcha.{0,50}` is one pattern, not two. Joining
+// on "," and splitting it back split every quantifier down the middle, so JSON is
+// used instead: it round-trips any pattern, comma or not.
+//
+// An empty list encodes to "" rather than "[]" to match the empty-string default on
+// these NOT NULL columns and keep "no patterns configured" a single representation.
+func encodeList(s []string) string {
+	if len(s) == 0 {
+		return ""
+	}
+	data, err := json.Marshal(s)
+	if err != nil {
+		// []string always marshals; fall back to the legacy encoding rather than
+		// writing a value decodeList could not read back.
+		return strings.Join(s, ",")
+	}
+	return string(data)
 }
 
-func splitStrings(s string) []string {
+// decodeList parses a value written by encodeList.
+//
+// Rows written before the JSON encoding are comma-joined, so anything that is not a
+// JSON array is read that way. That also covers the handler_chain column's
+// DEFAULT 'http,browser' and a lone legacy pattern that happens to start with "["
+// (`[a-z]+`), which fails to parse as JSON and falls through to the legacy split.
+func decodeList(s string) []string {
+	s = strings.TrimSpace(s)
 	if s == "" {
 		return nil
 	}
-	parts := strings.Split(s, ",")
+
+	if strings.HasPrefix(s, "[") {
+		var parsed []string
+		if err := json.Unmarshal([]byte(s), &parsed); err == nil {
+			return cleanList(parsed)
+		}
+	}
+
+	return cleanList(strings.Split(s, ","))
+}
+
+// cleanList trims each entry and drops the empty ones, matching what the previous
+// comma-splitting reader did.
+func cleanList(parts []string) []string {
 	result := make([]string, 0, len(parts))
 	for _, p := range parts {
 		p = strings.TrimSpace(p)
 		if p != "" {
 			result = append(result, p)
 		}
+	}
+	if len(result) == 0 {
+		return nil
 	}
 	return result
 }
