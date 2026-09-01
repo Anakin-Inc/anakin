@@ -104,10 +104,9 @@ func main() {
 		slog.Info("domain config cache started")
 	}
 
-	// Proxy pool (optional — only if PROXY_URLS is configured and DB is available)
-	var proxyPool *proxy.Pool
-	if len(cfg.ProxyURLs) > 0 && db != nil {
-		proxyPool = proxy.NewPool(db, cfg.ProxyURLs)
+	// Proxy pool (optional — enabled by PROXY_URLS)
+	proxyPool := newProxyPool(db, cfg.ProxyURLs)
+	if proxyPool != nil {
 		proxyPool.Start(bgCtx)
 	}
 
@@ -208,6 +207,22 @@ func main() {
 	browserHandler.Stop()
 
 	slog.Info("server stopped")
+}
+
+// newProxyPool builds the Thompson Sampling pool for PROXY_URLS, or returns nil when
+// no pool is configured.
+//
+// db may be nil. PostgreSQL only persists scores across restarts — proxy.Pool keeps
+// them in memory and skips its load and flush steps without one, which is the
+// behaviour docs/proxy-pool.md describes ("Without it, scores start fresh each
+// time"). Requiring a database here disabled proxy selection outright in the
+// zero-config mode the README leads with, so PROXY_URLS was silently ignored and
+// every request went direct.
+func newProxyPool(db *sql.DB, proxyURLs []string) *proxy.Pool {
+	if len(proxyURLs) == 0 {
+		return nil
+	}
+	return proxy.NewPool(db, proxyURLs)
 }
 
 func storageMode(db *sql.DB) string {
