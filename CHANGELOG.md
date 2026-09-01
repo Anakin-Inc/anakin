@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+### Security
+- **`GEMINI_API_KEY` written to the server log** — the Gemini client passed the key as a `?key=` query parameter, and `net/http` copies the full request URL into the `*url.Error` it returns on any transport failure. The processor logs that error, so a DNS hiccup or an unreachable endpoint was enough to print the operator's key in plaintext. The key is now sent in the `x-goog-api-key` header and never appears in a URL (`server/internal/gemini/client.go`)
+
 ### Fixed
 - **Proxy latency tracking** — the average latency EMA now seeds with the first observed sample instead of blending it against a zero baseline, which had caused a proxy's first request to be recorded at ~20% of its true latency (`server/internal/proxy/pool.go`)
 
