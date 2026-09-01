@@ -51,6 +51,15 @@ const (
 	)`
 )
 
+// Shutdown budget. shutdownGrace is how long Stop waits for the collector goroutine
+// to finish its final send; shutdownSendTimeout bounds that send just under the grace
+// period, so Stop observes the goroutine exiting instead of reporting a timeout for
+// work that is still running.
+const (
+	shutdownGrace       = 2 * time.Second
+	shutdownSendTimeout = shutdownGrace - 250*time.Millisecond
+)
+
 // Event represents a single telemetry event emitted after a job completes.
 type Event struct {
 	Endpoint     string // "scrape_sync", "scrape_async", "scrape_batch"
@@ -260,7 +269,9 @@ func (c *Collector) Status() StatusResponse {
 	}
 }
 
-// Stop gracefully shuts down the collector. Attempts a final send with a 2s timeout.
+// Stop gracefully shuts down the collector. The collector makes one final send
+// attempt bounded by shutdownSendTimeout, so Stop normally returns as soon as that
+// attempt finishes and always within shutdownGrace.
 func (c *Collector) Stop() {
 	if c == nil || !c.enabled {
 		return
@@ -270,7 +281,7 @@ func (c *Collector) Stop() {
 	}
 	select {
 	case <-c.done:
-	case <-time.After(2 * time.Second):
+	case <-time.After(shutdownGrace):
 		slog.Warn("telemetry: shutdown timed out")
 	}
 }
@@ -320,11 +331,16 @@ func (c *Collector) loop(ctx context.Context) {
 	for {
 		select {
 		case <-ctx.Done():
-			// Final send attempt on shutdown
-			c.trySend()
+			// Final send attempt on shutdown. ctx is already canceled, so the
+			// attempt gets its own budget — short enough that Stop sees this
+			// goroutine exit rather than timing out on it. Only one attempt fits
+			// in that budget; retryDelay is longer than the whole grace period.
+			sendCtx, cancel := context.WithTimeout(context.Background(), shutdownSendTimeout)
+			c.trySend(sendCtx)
+			cancel()
 			return
 		case <-ticker.C:
-			c.trySend()
+			c.trySend(ctx)
 		}
 	}
 }
@@ -391,8 +407,10 @@ func (c *Collector) snapshot(reset bool) *payload {
 	return p
 }
 
-// trySend snapshots counters and sends them to the telemetry endpoint.
-func (c *Collector) trySend() {
+// trySend snapshots counters and sends them to the telemetry endpoint. The send and
+// the retry backoff both stop as soon as ctx is done, so a shutdown is not held up by
+// an endpoint that is slow or unreachable.
+func (c *Collector) trySend(ctx context.Context) {
 	p := c.snapshot(true)
 
 	// Skip send if no events were collected
@@ -408,13 +426,26 @@ func (c *Collector) trySend() {
 	}
 
 	for attempt := 0; attempt <= maxRetries; attempt++ {
-		if attempt > 0 {
-			time.Sleep(retryDelay)
+		if attempt > 0 && !waitOrDone(ctx, retryDelay) {
+			slog.Warn("telemetry: send canceled during retry backoff, dropping batch",
+				"events", total, "attempt", attempt)
+			return
 		}
 
-		resp, err := c.client.Post(c.endpointURL, "application/json", bytes.NewReader(data))
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.endpointURL, bytes.NewReader(data))
+		if err != nil {
+			slog.Error("telemetry: failed to build request", "error", err, "event_count", total)
+			return
+		}
+		req.Header.Set("Content-Type", "application/json")
+
+		resp, err := c.client.Do(req)
 		if err != nil {
 			slog.Warn("telemetry: send failed", "error", err, "attempt", attempt)
+			if ctx.Err() != nil {
+				slog.Warn("telemetry: send canceled, dropping batch", "events", total)
+				return
+			}
 			continue
 		}
 		resp.Body.Close()
@@ -439,4 +470,16 @@ func (c *Collector) trySend() {
 	}
 
 	slog.Warn("telemetry: send failed after retries, dropping batch", "events", total)
+}
+
+// waitOrDone waits for d and reports true, or reports false as soon as ctx is done.
+func waitOrDone(ctx context.Context, d time.Duration) bool {
+	timer := time.NewTimer(d)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return false
+	case <-timer.C:
+		return true
+	}
 }
