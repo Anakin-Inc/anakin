@@ -4,7 +4,6 @@ package domain
 
 import (
 	"fmt"
-	"regexp"
 	"strings"
 )
 
@@ -35,18 +34,11 @@ func (d *Detector) Check(cfg *DomainConfig, html string) *DetectionResult {
 	}
 
 	// Check failure patterns (any match = failure)
-	for _, pattern := range cfg.FailurePatterns {
-		if pattern == "" {
-			continue
-		}
-		re, err := regexp.Compile(pattern)
-		if err != nil {
-			continue
-		}
+	for _, re := range cfg.CompiledFailurePatterns {
 		if re.MatchString(html) {
 			return &DetectionResult{
 				Failed:      true,
-				Reason:      fmt.Sprintf("failure pattern matched: %s", pattern),
+				Reason:      fmt.Sprintf("failure pattern matched: %s", re.String()),
 				ShouldRetry: true,
 			}
 		}
@@ -55,14 +47,7 @@ func (d *Detector) Check(cfg *DomainConfig, html string) *DetectionResult {
 	// Check required patterns (at least one must match for success)
 	if hasNonEmpty(cfg.RequiredPatterns) {
 		matched := false
-		for _, pattern := range cfg.RequiredPatterns {
-			if pattern == "" {
-				continue
-			}
-			re, err := regexp.Compile(pattern)
-			if err != nil {
-				continue
-			}
+		for _, re := range cfg.CompiledRequiredPatterns {
 			if re.MatchString(html) {
 				matched = true
 				break
