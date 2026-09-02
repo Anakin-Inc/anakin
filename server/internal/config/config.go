@@ -50,6 +50,9 @@ type Config struct {
 
 	// Logging
 	LogLevel string
+
+	// Rate limiting (per-IP): requests per minute. 0 = disabled
+	RateLimit int
 }
 
 // Load reads configuration from environment variables.
@@ -76,6 +79,7 @@ func Load() (*Config, error) {
 		TelemetryEnabled: getBoolEnvDefault("TELEMETRY", true),
 		TelemetryURL:     os.Getenv("TELEMETRY_URL"),
 		LogLevel:         getEnvOrDefault("LOG_LEVEL", "INFO"),
+		RateLimit:        getIntEnv("RATE_LIMIT", 60),
 	}
 
 	return cfg, nil
