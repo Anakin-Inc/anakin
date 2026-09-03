@@ -46,6 +46,9 @@ func TestBrowserHandler_ContextOptionsCopiesHeaders(t *testing.T) {
 	req := &models.HandlerRequest{URL: "https://example.com", CustomHeaders: headers}
 
 	opts := contextOptions(req)
+	if opts.ExtraHttpHeaders == nil {
+		t.Fatal("custom headers were dropped")
+	}
 	opts.ExtraHttpHeaders["Cookie"] = "tampered"
 
 	if headers["Cookie"] != "session=abc" {
