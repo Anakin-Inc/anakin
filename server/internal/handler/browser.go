@@ -68,7 +68,7 @@ func (h *BrowserHandler) Scrape(ctx context.Context, req *models.HandlerRequest)
 		}
 	}()
 
-	browserCtx, err := browser.NewContext()
+	browserCtx, err := browser.NewContext(contextOptions(req))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create browser context: %w", err)
 	}
@@ -109,6 +109,25 @@ func (h *BrowserHandler) Scrape(ctx context.Context, req *models.HandlerRequest)
 		HTML:       html,
 		StatusCode: 200,
 	}, nil
+}
+
+// contextOptions maps the per-request overrides a domain config can carry onto the
+// browser context. Unlike the HTTP handler, this handler does not build the outgoing
+// request itself — Camoufox does — so the context is the only place a custom
+// user-agent or custom headers can be applied.
+func contextOptions(req *models.HandlerRequest) playwright.BrowserNewContextOptions {
+	var opts playwright.BrowserNewContextOptions
+	if req.CustomUserAgent != "" {
+		opts.UserAgent = playwright.String(req.CustomUserAgent)
+	}
+	if len(req.CustomHeaders) > 0 {
+		headers := make(map[string]string, len(req.CustomHeaders))
+		for k, v := range req.CustomHeaders {
+			headers[k] = v
+		}
+		opts.ExtraHttpHeaders = headers
+	}
+	return opts
 }
 
 // Stop cleans up the Playwright driver.

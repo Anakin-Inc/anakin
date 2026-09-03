@@ -32,6 +32,7 @@ Connects to [Camoufox](https://github.com/daijro/camoufox) (anti-detect Firefox)
 
 - Waits for `networkidle` state (no pending network requests)
 - Optional extra wait time after page load (`BROWSER_LOAD_WAIT`, default 2s)
+- Supports custom headers and user-agent per request (via domain configs)
 - Not headless Chrome — Camoufox is a modified Firefox that resists fingerprinting
 - Requires the browser service to be running (Docker or `python server.py`)
 - If the browser service is unavailable, this handler is marked unhealthy and skipped
