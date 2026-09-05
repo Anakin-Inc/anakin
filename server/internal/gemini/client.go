@@ -13,6 +13,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 )
 
 // Client handles interactions with Google Gemini API for structured JSON extraction.
@@ -714,13 +715,23 @@ func chunkMarkdown(markdown string, chunkSize int, overlap int) []string {
 		if breakPoint > start {
 			end = breakPoint
 		}
+		if aligned := alignToRuneStart(markdown, end); aligned > start {
+			end = aligned
+		}
 
 		chunks = append(chunks, markdown[start:end])
 
-		start = end - overlap
-		if start < 0 {
-			start = 0
+		next := end - overlap
+		if next < 0 {
+			next = 0
 		}
+		next = alignToRuneStart(markdown, next)
+		if next <= start {
+			// Overlap wider than the chunk just cut: drop the overlap rather
+			// than re-emit the same chunk forever.
+			next = end
+		}
+		start = next
 	}
 
 	return chunks
@@ -756,6 +767,23 @@ func findNaturalBreak(text string, target int, searchRange int) int {
 		}
 	}
 	return target
+}
+
+// alignToRuneStart moves a byte offset back to the start of the character it
+// lands in. Chunk boundaries are plain byte arithmetic, so without this a
+// boundary inside a multi-byte character splits that character in half and both
+// chunks carry a broken sequence into the prompt.
+func alignToRuneStart(s string, i int) int {
+	if i <= 0 {
+		return 0
+	}
+	if i >= len(s) {
+		return len(s)
+	}
+	for i > 0 && !utf8.RuneStart(s[i]) {
+		i--
+	}
+	return i
 }
 
 func selectMostRelevantChunks(chunks []string, maxCount int) []string {
