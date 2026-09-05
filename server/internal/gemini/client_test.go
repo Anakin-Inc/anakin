@@ -2,8 +2,10 @@ package gemini
 
 import (
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
+	"unicode/utf8"
 )
 
 // --- cleanJSONResponse ---
@@ -215,6 +217,97 @@ func TestChunkMarkdown_OverlapBetweenChunks(t *testing.T) {
 		// before where the first chunk ended
 		_ = prevEnd
 		_ = currStart
+	}
+}
+
+// japaneseMarkdown builds a document several chunks long whose characters are
+// all multi-byte, with a unique marker per paragraph so a chunk's position in
+// the document is unambiguous.
+func japaneseMarkdown(t *testing.T) string {
+	t.Helper()
+	var b strings.Builder
+	for i := 0; b.Len() <= maxChunkSize*3; i++ {
+		fmt.Fprintf(&b, "## 見出し%06d\n\nこれは日本語のテキストです。ウェブページから取得した内容を表しています。\n\n", i)
+	}
+	return b.String()
+}
+
+func TestChunkMarkdown_DoesNotSplitMultiByteCharacters(t *testing.T) {
+	md := japaneseMarkdown(t)
+
+	chunks := chunkMarkdown(md, maxChunkSize, chunkOverlap)
+	if len(chunks) < 2 {
+		t.Fatalf("expected the input to be chunked, got %d chunk(s)", len(chunks))
+	}
+
+	for i, chunk := range chunks {
+		if utf8.ValidString(chunk) {
+			continue
+		}
+		head := chunk
+		if len(head) > 8 {
+			head = head[:8]
+		}
+		t.Errorf("chunk %d is not valid UTF-8 — a character was split across the boundary (first bytes: % x)", i, []byte(head))
+	}
+}
+
+// The alignment must not drop text: every byte of the document still has to
+// land in at least one chunk.
+func TestChunkMarkdown_CoversWholeDocument(t *testing.T) {
+	md := japaneseMarkdown(t)
+
+	chunks := chunkMarkdown(md, maxChunkSize, chunkOverlap)
+	if len(chunks) < 2 {
+		t.Fatalf("expected the input to be chunked, got %d chunk(s)", len(chunks))
+	}
+	if !strings.HasPrefix(md, chunks[0]) {
+		t.Fatal("first chunk is not a prefix of the document")
+	}
+	if !strings.HasSuffix(md, chunks[len(chunks)-1]) {
+		t.Fatal("last chunk is not a suffix of the document")
+	}
+
+	prevEnd := len(chunks[0])
+	for i := 1; i < len(chunks); i++ {
+		at := strings.Index(md, chunks[i])
+		if at < 0 {
+			t.Fatalf("chunk %d does not appear in the document", i)
+		}
+		if at > prevEnd {
+			t.Errorf("chunk %d starts at byte %d, so bytes %d..%d are in no chunk", i, at, prevEnd, at)
+		}
+		prevEnd = at + len(chunks[i])
+	}
+	if prevEnd != len(md) {
+		t.Errorf("chunks end at byte %d, document is %d bytes", prevEnd, len(md))
+	}
+}
+
+func TestAlignToRuneStart(t *testing.T) {
+	const multi = "aあb" // a=1 byte, あ=3 bytes (indices 1,2,3), b=1 byte
+
+	tests := []struct {
+		name string
+		s    string
+		i    int
+		want int
+	}{
+		{name: "negative clamps to zero", s: multi, i: -5, want: 0},
+		{name: "past the end clamps to length", s: multi, i: 99, want: len(multi)},
+		{name: "already a boundary is unchanged", s: multi, i: 1, want: 1},
+		{name: "continuation byte moves back", s: multi, i: 2, want: 1},
+		{name: "last continuation byte moves back", s: multi, i: 3, want: 1},
+		{name: "next character is a boundary", s: multi, i: 4, want: 4},
+		{name: "ascii is never moved", s: "plain ascii", i: 6, want: 6},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := alignToRuneStart(tc.s, tc.i); got != tc.want {
+				t.Errorf("alignToRuneStart(%q, %d) = %d, want %d", tc.s, tc.i, got, tc.want)
+			}
+		})
 	}
 }
 

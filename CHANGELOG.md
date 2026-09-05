@@ -3,6 +3,7 @@
 ## Unreleased
 
 ### Fixed
+- **Chunked JSON extraction on non-Latin pages** — chunk boundaries are now aligned to character starts, so a multi-byte character is no longer split in half. Boundaries were plain byte arithmetic, so on a page written in Japanese, Chinese, Arabic, Cyrillic — anything outside ASCII — nearly every chunk began mid-character and carried a broken sequence into the Gemini prompt (`server/internal/gemini/client.go`)
 - **Proxy latency tracking** — the average latency EMA now seeds with the first observed sample instead of blending it against a zero baseline, which had caused a proxy's first request to be recorded at ~20% of its true latency (`server/internal/proxy/pool.go`)
 
 ## v0.1.1 (2026-03-20)
