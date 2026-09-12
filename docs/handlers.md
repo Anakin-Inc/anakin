@@ -75,7 +75,7 @@ Domain configs can override which handlers are used:
 {"domain": "spa-app.com", "handlerChain": ["browser"]}
 ```
 
-This skips the HTTP handler entirely. The chain only tries handlers listed in `handlerChain`.
+This skips the HTTP handler entirely. The chain only tries handlers listed in `handlerChain`, and it tries them in the order they are listed — `["browser", "http"]` reaches the browser first even though the HTTP handler is registered first. A name that matches no registered handler (`"anakin"` without `ANAKIN_API_KEY`) is skipped.
 
 See [domain-configs.md](domain-configs.md) for full details.
 

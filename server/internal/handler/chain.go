@@ -29,11 +29,7 @@ func (c *Chain) Execute(ctx context.Context, req *models.HandlerRequest) (*model
 
 	var lastErr error
 
-	for _, h := range c.handlers {
-		if len(req.AllowedHandlers) > 0 && !contains(req.AllowedHandlers, h.Name()) {
-			continue
-		}
-
+	for _, h := range c.order(req.AllowedHandlers) {
 		if !h.CanHandle(ctx, req) {
 			slog.Debug("handler cannot handle request", "handler", h.Name(), "url", req.URL)
 			continue
@@ -77,13 +73,43 @@ func (c *Chain) Execute(ctx context.Context, req *models.HandlerRequest) (*model
 	return nil, fmt.Errorf("all handlers failed: %w", lastErr)
 }
 
-func contains(ss []string, s string) bool {
-	for _, v := range ss {
-		if v == s {
-			return true
-		}
+// order returns the handlers to try, in the order they should be tried.
+//
+// A domain config's handlerChain is documented as "which handlers to try, in
+// order", so it decides the fallback order and not just which handlers are
+// eligible: ["browser", "http"] must reach the browser first even though the
+// HTTP handler is registered first. With no allow-list the registration order
+// from main.go stands.
+//
+// Names that match no registered handler are skipped — a config can ask for
+// "anakin" on an instance started without ANAKIN_API_KEY. A name repeated in
+// the config is tried once.
+func (c *Chain) order(allowed []string) []ScrapingHandler {
+	if len(allowed) == 0 {
+		return c.handlers
 	}
-	return false
+
+	byName := make(map[string]ScrapingHandler, len(c.handlers))
+	for _, h := range c.handlers {
+		byName[h.Name()] = h
+	}
+
+	ordered := make([]ScrapingHandler, 0, len(allowed))
+	seen := make(map[string]bool, len(allowed))
+	for _, name := range allowed {
+		if seen[name] {
+			continue
+		}
+		seen[name] = true
+
+		h, ok := byName[name]
+		if !ok {
+			slog.Warn("handler in chain is not registered, skipping", "handler", name)
+			continue
+		}
+		ordered = append(ordered, h)
+	}
+	return ordered
 }
 
 // HandlerNames returns the names of all registered handlers.

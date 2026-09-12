@@ -3,6 +3,7 @@
 ## Unreleased
 
 ### Fixed
+- **Domain config `handlerChain` order** — the chain now tries handlers in the order the domain config lists them. `handlerChain` is documented as "which handlers to try, in order", but it was only used as a membership filter over the registration order from `main.go`, so `["browser", "http"]` still sent every request to the HTTP handler first and reached the browser only after it failed (`server/internal/handler/chain.go`)
 - **Proxy latency tracking** — the average latency EMA now seeds with the first observed sample instead of blending it against a zero baseline, which had caused a proxy's first request to be recorded at ~20% of its true latency (`server/internal/proxy/pool.go`)
 
 ## v0.1.1 (2026-03-20)
