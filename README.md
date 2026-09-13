@@ -1,3 +1,4 @@
+This is completly created by using vibe coding and example of creating this using Google Ai Studio.
 # AnakinScraper OSS
 
 [![CI](https://github.com/Anakin-Inc/anakinscraper-oss/actions/workflows/ci.yml/badge.svg)](https://github.com/Anakin-Inc/anakinscraper-oss/actions/workflows/ci.yml)
