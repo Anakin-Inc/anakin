@@ -3,6 +3,7 @@
 ## Unreleased
 
 ### Fixed
+- **Failure detection now falls back to the next handler** — a page rejected by a domain config's `failurePatterns`, `requiredPatterns` or `minContentLength` is validated inside the handler chain, so the job moves on to the next handler instead of re-running the one that returned the bad page (`server/internal/handler/chain.go`, `server/internal/processor/processor.go`)
 - **Proxy latency tracking** — the average latency EMA now seeds with the first observed sample instead of blending it against a zero baseline, which had caused a proxy's first request to be recorded at ~20% of its true latency (`server/internal/proxy/pool.go`)
 
 ## v0.1.1 (2026-03-20)

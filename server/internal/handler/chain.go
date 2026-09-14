@@ -59,6 +59,27 @@ func (c *Chain) Execute(ctx context.Context, req *models.HandlerRequest) (*model
 			continue
 		}
 
+		result.Handler = h.Name()
+		result.DurationMs = int(elapsed.Milliseconds())
+
+		// A handler can return HTTP 200 and still hand back the wrong page — a CAPTCHA
+		// interstitial, a login wall, an empty shell. Rejecting it here rather than
+		// after Execute returns is what lets the chain fall through to the next
+		// handler; retrying the whole chain would just re-run this one and get the
+		// same page back.
+		if req.Validate != nil {
+			if validationErr := req.Validate(result); validationErr != nil {
+				slog.Warn("handler result rejected",
+					"handler", h.Name(),
+					"url", req.URL,
+					"duration_ms", elapsed.Milliseconds(),
+					"error", validationErr,
+				)
+				lastErr = validationErr
+				continue
+			}
+		}
+
 		slog.Info("handler succeeded",
 			"handler", h.Name(),
 			"url", req.URL,
@@ -66,8 +87,6 @@ func (c *Chain) Execute(ctx context.Context, req *models.HandlerRequest) (*model
 			"status_code", result.StatusCode,
 		)
 
-		result.Handler = h.Name()
-		result.DurationMs = int(elapsed.Milliseconds())
 		return result, nil
 	}
 
