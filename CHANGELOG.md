@@ -3,6 +3,7 @@
 ## Unreleased
 
 ### Fixed
+- **Graceful shutdown now drains the worker pool** — queued and in-flight jobs are given the shutdown budget to finish before their context is cancelled, instead of being cancelled and recorded as failed the moment SIGTERM arrives (`server/cmd/server/main.go`)
 - **Proxy latency tracking** — the average latency EMA now seeds with the first observed sample instead of blending it against a zero baseline, which had caused a proxy's first request to be recorded at ~20% of its true latency (`server/internal/proxy/pool.go`)
 
 ## v0.1.1 (2026-03-20)
