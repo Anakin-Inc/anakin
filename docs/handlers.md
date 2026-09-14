@@ -206,4 +206,4 @@ API keys always follow this pattern:
 
 This keeps secrets out of code, makes handlers testable, and ensures unused handlers have zero overhead.
 
-See [examples/custom-handler/](../examples/custom-handler/) for a working example with a local file-based handler.
+See [server/examples/custom-handler/](../server/examples/custom-handler/) for a working example with a local file-based handler.

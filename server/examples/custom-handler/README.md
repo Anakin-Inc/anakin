@@ -13,7 +13,8 @@ This example implements a `CachedHTMLHandler` that serves pre-fetched HTML from 
 ## Run
 
 ```bash
-# From the server directory (needed for Go module dependencies)
+# From the server directory — the example is part of the server module because it
+# imports server/internal/..., which Go only allows for code rooted at server/.
 cd server
 
 # Optional: create a cached page to test the custom handler
@@ -21,7 +22,7 @@ mkdir -p cached-pages
 echo "<html><body>Cached!</body></html>" > cached-pages/example.com.html
 
 # Run the example
-go run ../examples/custom-handler/main.go https://example.com
+go run ./examples/custom-handler https://example.com
 ```
 
 ## The Interface
