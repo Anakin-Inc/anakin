@@ -21,6 +21,8 @@ type FormData = {
   notes: string;
 };
 
+const AVAILABLE_HANDLERS = ['http', 'browser', 'anakin'];
+
 const emptyForm: FormData = {
   domain: '',
   isEnabled: true,
@@ -407,7 +409,7 @@ export function DomainConfigs() {
                     </div>
                   ))}
                   <div className="flex gap-2 mt-1">
-                    {['http', 'browser'].filter(h => !form.handlerChain.includes(h)).map(h => (
+                    {AVAILABLE_HANDLERS.filter(h => !form.handlerChain.includes(h)).map(h => (
                       <button
                         key={h}
                         type="button"
