@@ -3,6 +3,7 @@
 ## Unreleased
 
 ### Fixed
+- **MemoryStore bounded capacity and eviction** — `MemoryStore` now enforces a bounded job capacity (`MEMORY_STORE_MAX_JOBS`, default 1000) and automatically evicts oldest completed/failed jobs on capacity overflow to prevent unbounded memory growth and OOM in zero-config mode (`server/internal/store/memory.go`)
 - **Proxy latency tracking** — the average latency EMA now seeds with the first observed sample instead of blending it against a zero baseline, which had caused a proxy's first request to be recorded at ~20% of its true latency (`server/internal/proxy/pool.go`)
 
 ## v0.1.1 (2026-03-20)
