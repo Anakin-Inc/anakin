@@ -3,6 +3,7 @@
 ## Unreleased
 
 ### Fixed
+- **Domain configs handler chain** — allow adding `anakin` handler to a domain config's handler chain from the web dashboard (`webapp/src/pages/DomainConfigs.tsx`)
 - **Proxy latency tracking** — the average latency EMA now seeds with the first observed sample instead of blending it against a zero baseline, which had caused a proxy's first request to be recorded at ~20% of its true latency (`server/internal/proxy/pool.go`)
 
 ## v0.1.1 (2026-03-20)
