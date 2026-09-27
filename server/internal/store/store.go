@@ -45,7 +45,7 @@ type JobStore interface {
 	// GetJob returns a job by ID.
 	GetJob(ctx context.Context, id string) (*JobRecord, error)
 
-	// GetChildJobs returns all child jobs for a parent batch job.
+	// GetChildJobs returns all child jobs for a parent batch job, ordered by creation time ascending.
 	GetChildJobs(ctx context.Context, parentJobID string) ([]JobRecord, error)
 
 	// UpdateStatus updates a job's status, error, and duration.
