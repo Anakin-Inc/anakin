@@ -93,7 +93,7 @@ export function ProxyScores() {
 
       {/* Scores by Host */}
       {hosts.map((host) => {
-        const scores = data!.scores[host].sort((a, b) => b.score - a.score);
+        const scores = [...data!.scores[host]].sort((a, b) => b.score - a.score);
         const isExpanded = expandedHost === host;
 
         return (
