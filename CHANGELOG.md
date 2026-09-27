@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+### Added
+- **404 page and ErrorBoundary** — added `<Route path="*">` catch-all rendering a styled `NotFound` view and wrapped the dashboard router in an `ErrorBoundary` component to gracefully catch render errors with recovery options (`webapp/src/pages/NotFound.tsx`, `webapp/src/components/ErrorBoundary.tsx`)
+
 ### Fixed
 - **Proxy latency tracking** — the average latency EMA now seeds with the first observed sample instead of blending it against a zero baseline, which had caused a proxy's first request to be recorded at ~20% of its true latency (`server/internal/proxy/pool.go`)
 
