@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+### Added
+- **Configuration documentation** — added `MAX_JOB_RETRIES`, `PROXY_URLS`, and `DISABLE_HOSTED_HINTS` to `.env.example` and documented `MAX_JOB_RETRIES` in `README.md`
+
 ### Fixed
 - **Proxy latency tracking** — the average latency EMA now seeds with the first observed sample instead of blending it against a zero baseline, which had caused a proxy's first request to be recorded at ~20% of its true latency (`server/internal/proxy/pool.go`)
 
