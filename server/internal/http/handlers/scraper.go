@@ -271,18 +271,32 @@ func (h *ScraperHandler) CreateBatchJob(c *fiber.Ctx) error {
 		})
 	}
 
+	type batchChild struct {
+		id  string
+		url string
+	}
+	children := make([]batchChild, 0, len(req.URLs))
+
 	for _, u := range req.URLs {
 		childID := uuid.New().String()
 		if err := h.store.CreateJob(c.Context(), store.JobRecord{
 			ID: childID, JobType: models.JobTypeURLScraper, URL: u,
 			Country: req.Country, Payload: "{}", ParentJobID: parentJobID,
 		}); err != nil {
-			slog.Error("failed to insert child job", "error", err, "childId", childID)
-			continue
+			slog.Error("failed to insert child job", "error", err, "childId", childID, "jobId", parentJobID)
+			errMsg := "Failed to persist all child jobs"
+			_ = h.store.UpdateStatus(c.Context(), parentJobID, models.JobStatusFailed, &errMsg, nil)
+			return c.Status(fiber.StatusInternalServerError).JSON(models.ErrorResponse{
+				Error: "internal_error", Message: "Failed to create batch job",
+			})
 		}
+		children = append(children, batchChild{id: childID, url: u})
+	}
+
+	for _, child := range children {
 		h.pool.Submit(models.JobMessage{
-			JobID:        childID,
-			URL:          u,
+			JobID:        child.id,
+			URL:          child.url,
 			JobType:      models.JobTypeURLScraper,
 			Country:      req.Country,
 			UseBrowser:   req.UseBrowser,
