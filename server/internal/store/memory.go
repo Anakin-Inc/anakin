@@ -9,21 +9,66 @@ import (
 	"time"
 )
 
+// DefaultMemoryStoreMaxJobs is the default maximum number of jobs retained in memory.
+const DefaultMemoryStoreMaxJobs = 1000
+
 // MemoryStore is an in-memory job store for zero-config "try it" mode.
 // Jobs are lost on restart. Not suitable for production.
 type MemoryStore struct {
-	mu   sync.RWMutex
-	jobs map[string]*JobRecord
+	mu      sync.RWMutex
+	maxJobs int
+	jobs    map[string]*JobRecord
 }
 
-// NewMemoryStore creates a new in-memory store.
+// NewMemoryStore creates a new in-memory store with default capacity.
 func NewMemoryStore() *MemoryStore {
-	return &MemoryStore{jobs: make(map[string]*JobRecord)}
+	return NewMemoryStoreWithCapacity(DefaultMemoryStoreMaxJobs)
+}
+
+// NewMemoryStoreWithCapacity creates a new in-memory store with specified max jobs capacity.
+func NewMemoryStoreWithCapacity(maxJobs int) *MemoryStore {
+	if maxJobs <= 0 {
+		maxJobs = DefaultMemoryStoreMaxJobs
+	}
+	return &MemoryStore{
+		maxJobs: maxJobs,
+		jobs:    make(map[string]*JobRecord),
+	}
+}
+
+// evictOldestLocked evicts the oldest job, prioritizing completed or failed jobs first.
+func (m *MemoryStore) evictOldestLocked() {
+	var oldestID string
+	var oldestTime time.Time
+	var oldestFinishedID string
+	var oldestFinishedTime time.Time
+
+	for id, j := range m.jobs {
+		if oldestID == "" || j.CreatedAt.Before(oldestTime) {
+			oldestTime = j.CreatedAt
+			oldestID = id
+		}
+		if (j.Status == "completed" || j.Status == "failed") && (oldestFinishedID == "" || j.CreatedAt.Before(oldestFinishedTime)) {
+			oldestFinishedTime = j.CreatedAt
+			oldestFinishedID = id
+		}
+	}
+
+	target := oldestFinishedID
+	if target == "" {
+		target = oldestID
+	}
+	if target != "" {
+		delete(m.jobs, target)
+	}
 }
 
 func (m *MemoryStore) CreateJob(_ context.Context, job JobRecord) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if len(m.jobs) >= m.maxJobs {
+		m.evictOldestLocked()
+	}
 	j := job // copy
 	j.CreatedAt = time.Now().UTC()
 	m.jobs[job.ID] = &j

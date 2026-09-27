@@ -22,10 +22,11 @@ type Config struct {
 	BrowserLoadWait time.Duration
 
 	// Job Processing
-	JobTimeout     time.Duration
-	MaxJobRetries  int
-	WorkerPoolSize int
-	JobBufferSize  int
+	JobTimeout         time.Duration
+	MaxJobRetries      int
+	WorkerPoolSize     int
+	JobBufferSize      int
+	MemoryStoreMaxJobs int
 
 	// Proxy (optional)
 	ProxyURL  string
@@ -60,10 +61,11 @@ func Load() (*Config, error) {
 		BrowserWSURL:    getEnvOrDefault("BROWSER_WS_URL", "ws://localhost:9222/camoufox"),
 		BrowserTimeout:  getDurationEnv("BROWSER_TIMEOUT", 60*time.Second),
 		BrowserLoadWait: getDurationEnv("BROWSER_LOAD_WAIT", 2*time.Second),
-		JobTimeout:      getDurationEnv("JOB_TIMEOUT", 120*time.Second),
-		MaxJobRetries:   getIntEnv("MAX_JOB_RETRIES", 3),
-		WorkerPoolSize:  getIntEnv("WORKER_POOL_SIZE", 5),
-		JobBufferSize:   getIntEnv("JOB_BUFFER_SIZE", 100),
+		JobTimeout:         getDurationEnv("JOB_TIMEOUT", 120*time.Second),
+		MaxJobRetries:      getIntEnv("MAX_JOB_RETRIES", 3),
+		WorkerPoolSize:     getIntEnv("WORKER_POOL_SIZE", 5),
+		JobBufferSize:      getIntEnv("JOB_BUFFER_SIZE", 100),
+		MemoryStoreMaxJobs: getIntEnv("MEMORY_STORE_MAX_JOBS", 1000),
 		ProxyURL:        os.Getenv("PROXY_URL"),
 		ProxyURLs:       getStringSliceEnv("PROXY_URLS"),
 

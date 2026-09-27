@@ -70,8 +70,8 @@ func main() {
 		slog.Info("connected to PostgreSQL")
 		jobStore = store.NewPostgresStore(db)
 	} else {
-		slog.Info("no DATABASE_URL — using in-memory storage (jobs won't persist across restarts)")
-		jobStore = store.NewMemoryStore()
+		slog.Info("no DATABASE_URL — using in-memory storage (jobs won't persist across restarts)", "maxJobs", cfg.MemoryStoreMaxJobs)
+		jobStore = store.NewMemoryStoreWithCapacity(cfg.MemoryStoreMaxJobs)
 	}
 
 	// Build handler chain: HTTP -> Browser -> [API fallback]
