@@ -5,6 +5,7 @@ package store
 import (
 	"context"
 	"fmt"
+	"sort"
 	"sync"
 	"time"
 )
@@ -12,13 +13,18 @@ import (
 // MemoryStore is an in-memory job store for zero-config "try it" mode.
 // Jobs are lost on restart. Not suitable for production.
 type MemoryStore struct {
-	mu   sync.RWMutex
-	jobs map[string]*JobRecord
+	mu      sync.RWMutex
+	jobs    map[string]*JobRecord
+	seqMap  map[string]uint64
+	nextSeq uint64
 }
 
 // NewMemoryStore creates a new in-memory store.
 func NewMemoryStore() *MemoryStore {
-	return &MemoryStore{jobs: make(map[string]*JobRecord)}
+	return &MemoryStore{
+		jobs:   make(map[string]*JobRecord),
+		seqMap: make(map[string]uint64),
+	}
 }
 
 func (m *MemoryStore) CreateJob(_ context.Context, job JobRecord) error {
@@ -27,6 +33,8 @@ func (m *MemoryStore) CreateJob(_ context.Context, job JobRecord) error {
 	j := job // copy
 	j.CreatedAt = time.Now().UTC()
 	m.jobs[job.ID] = &j
+	m.nextSeq++
+	m.seqMap[job.ID] = m.nextSeq
 	return nil
 }
 
@@ -50,6 +58,17 @@ func (m *MemoryStore) GetChildJobs(_ context.Context, parentJobID string) ([]Job
 			children = append(children, *j)
 		}
 	}
+	sort.Slice(children, func(i, j int) bool {
+		seqI, okI := m.seqMap[children[i].ID]
+		seqJ, okJ := m.seqMap[children[j].ID]
+		if okI && okJ {
+			return seqI < seqJ
+		}
+		if children[i].CreatedAt.Equal(children[j].CreatedAt) {
+			return children[i].ID < children[j].ID
+		}
+		return children[i].CreatedAt.Before(children[j].CreatedAt)
+	})
 	return children, nil
 }
 
