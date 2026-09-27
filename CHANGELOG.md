@@ -3,6 +3,7 @@
 ## Unreleased
 
 ### Fixed
+- **Atomic batch job creation** — `POST /v1/url-scraper/batch` now fails gracefully with 500 and marks the parent job as failed if any child job cannot be persisted, avoiding submitting orphaned jobs or falsely reporting unpersisted URLs as created (`server/internal/http/handlers/scraper.go`)
 - **Proxy latency tracking** — the average latency EMA now seeds with the first observed sample instead of blending it against a zero baseline, which had caused a proxy's first request to be recorded at ~20% of its true latency (`server/internal/proxy/pool.go`)
 
 ## v0.1.1 (2026-03-20)
