@@ -77,6 +77,24 @@ func (h *ScraperHandler) CreateJob(c *fiber.Ctx) error {
 	})
 }
 
+const (
+	syncPollInterval   = 500 * time.Millisecond
+	defaultSyncTimeout = 30 * time.Second
+	maxSyncTimeout     = 120 * time.Second
+)
+
+// resolveSyncTimeout clamps the requested timeout in seconds between defaultSyncTimeout (for <= 0) and maxSyncTimeout.
+func resolveSyncTimeout(reqTimeout int) time.Duration {
+	if reqTimeout <= 0 {
+		return defaultSyncTimeout
+	}
+	d := time.Duration(reqTimeout) * time.Second
+	if d > maxSyncTimeout {
+		return maxSyncTimeout
+	}
+	return d
+}
+
 // ScrapeSync is the synchronous endpoint: submit a job and wait for the result.
 // Polls the database every 500ms until the job completes or the 30s timeout expires.
 func (h *ScraperHandler) ScrapeSync(c *fiber.Ctx) error {
@@ -121,21 +139,9 @@ func (h *ScraperHandler) ScrapeSync(c *fiber.Ctx) error {
 
 	// Poll store until job completes or timeout expires.
 	// Timeout is configurable via request body (default: 30s, max: 120s).
-	const (
-		pollInterval   = 500 * time.Millisecond
-		defaultTimeout = 30 * time.Second
-		maxTimeout     = 120 * time.Second
-	)
-	maxWait := defaultTimeout
-	if req.Timeout > 0 {
-		requested := time.Duration(req.Timeout) * time.Second
-		if requested > maxTimeout {
-			requested = maxTimeout
-		}
-		maxWait = requested
-	}
+	maxWait := resolveSyncTimeout(req.Timeout)
 	deadline := time.Now().Add(maxWait)
-	ticker := time.NewTicker(pollInterval)
+	ticker := time.NewTicker(syncPollInterval)
 	defer ticker.Stop()
 
 	for {

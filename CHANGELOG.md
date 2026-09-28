@@ -3,6 +3,7 @@
 ## Unreleased
 
 ### Fixed
+- **Scraper handler tests and sync timeout** — extracted `resolveSyncTimeout` into package-level production code and updated `scraper_test.go` to test real handler functions (`resolveSyncTimeout` and `validateURL`), eliminating 0% test coverage drift (`server/internal/http/handlers/scraper.go`, `server/internal/http/handlers/scraper_test.go`)
 - **Proxy latency tracking** — the average latency EMA now seeds with the first observed sample instead of blending it against a zero baseline, which had caused a proxy's first request to be recorded at ~20% of its true latency (`server/internal/proxy/pool.go`)
 
 ## v0.1.1 (2026-03-20)
