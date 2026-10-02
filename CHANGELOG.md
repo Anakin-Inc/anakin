@@ -4,6 +4,7 @@
 
 ### Fixed
 - **Proxy latency tracking** — the average latency EMA now seeds with the first observed sample instead of blending it against a zero baseline, which had caused a proxy's first request to be recorded at ~20% of its true latency (`server/internal/proxy/pool.go`)
+- **Non-UTF-8 pages** — the HTTP handler now transcodes pages served in a legacy encoding (Shift_JIS, windows-1251, ISO-8859-1, …) to UTF-8, using the `Content-Type` header, then a `<meta>` declaration, then windows-1252. The raw bytes were passed through untouched, so every non-ASCII character on such a page came back as U+FFFD (the replacement character) in `html`, `cleanedHtml` and `markdown`. Bodies that are already valid UTF-8 are left as they are (`server/internal/handler/charset.go`)
 
 ## v0.1.1 (2026-03-20)
 

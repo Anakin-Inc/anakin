@@ -111,7 +111,7 @@ func (h *HTTPHandler) Scrape(ctx context.Context, req *models.HandlerRequest) (*
 	}
 
 	return &models.ScrapeResult{
-		HTML:       string(body),
+		HTML:       decodeBody(body, resp.Header.Get("Content-Type")),
 		StatusCode: resp.StatusCode,
 	}, nil
 }
