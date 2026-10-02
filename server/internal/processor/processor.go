@@ -5,6 +5,7 @@ package processor
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -152,6 +153,13 @@ func (p *Processor) processScrapeJob(ctx context.Context, msg models.JobMessage,
 		result, err = p.chain.Execute(ctx, req)
 		if err != nil {
 			lastErr = err
+			// A missing or rejected payment is a client error, not a transient
+			// scrape failure. Retrying re-runs the earlier handlers for nothing,
+			// so stop here and let the caller pay and resubmit.
+			var payErr *handler.PaymentRequiredError
+			if errors.As(err, &payErr) {
+				break
+			}
 			continue
 		}
 
@@ -276,11 +284,12 @@ func (p *Processor) processScrapeJob(ctx context.Context, msg models.JobMessage,
 
 func (p *Processor) buildHandlerRequest(msg models.JobMessage, targetURL string) *models.HandlerRequest {
 	return &models.HandlerRequest{
-		JobID:      msg.JobID,
-		URL:        targetURL,
-		Country:    msg.Country,
-		UseBrowser: msg.UseBrowser,
-		Timeout:    60 * time.Second,
+		JobID:         msg.JobID,
+		URL:           targetURL,
+		Country:       msg.Country,
+		UseBrowser:    msg.UseBrowser,
+		Timeout:       60 * time.Second,
+		PaymentHeader: msg.PaymentHeader,
 	}
 }
 

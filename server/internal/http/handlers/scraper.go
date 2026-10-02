@@ -13,6 +13,7 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
 
+	"github.com/Anakin-Inc/anakinscraper-oss/server/internal/handler"
 	"github.com/Anakin-Inc/anakinscraper-oss/server/internal/models"
 	"github.com/Anakin-Inc/anakinscraper-oss/server/internal/netguard"
 	"github.com/Anakin-Inc/anakinscraper-oss/server/internal/store"
@@ -57,13 +58,14 @@ func (h *ScraperHandler) CreateJob(c *fiber.Ctx) error {
 	}
 
 	h.pool.Submit(models.JobMessage{
-		JobID:        jobID,
-		URL:          req.URL,
-		JobType:      models.JobTypeURLScraper,
-		Country:      req.Country,
-		ForceFresh:   req.ForceFresh,
-		UseBrowser:   req.UseBrowser,
-		GenerateJson: req.GenerateJson,
+		JobID:         jobID,
+		URL:           req.URL,
+		JobType:       models.JobTypeURLScraper,
+		Country:       req.Country,
+		ForceFresh:    req.ForceFresh,
+		UseBrowser:    req.UseBrowser,
+		GenerateJson:  req.GenerateJson,
+		PaymentHeader: c.Get(handler.PaymentHeader),
 	})
 
 	slog.Info("job created", "jobId", jobID, "url", req.URL)
@@ -107,14 +109,15 @@ func (h *ScraperHandler) ScrapeSync(c *fiber.Ctx) error {
 	}
 
 	h.pool.Submit(models.JobMessage{
-		JobID:        jobID,
-		URL:          req.URL,
-		JobType:      models.JobTypeURLScraper,
-		Country:      req.Country,
-		ForceFresh:   req.ForceFresh,
-		UseBrowser:   req.UseBrowser,
-		GenerateJson: req.GenerateJson,
-		SyncRequest:  true,
+		JobID:         jobID,
+		URL:           req.URL,
+		JobType:       models.JobTypeURLScraper,
+		Country:       req.Country,
+		ForceFresh:    req.ForceFresh,
+		UseBrowser:    req.UseBrowser,
+		GenerateJson:  req.GenerateJson,
+		SyncRequest:   true,
+		PaymentHeader: c.Get(handler.PaymentHeader),
 	})
 
 	slog.Info("sync scrape started", "jobId", jobID, "url", req.URL)
@@ -281,13 +284,14 @@ func (h *ScraperHandler) CreateBatchJob(c *fiber.Ctx) error {
 			continue
 		}
 		h.pool.Submit(models.JobMessage{
-			JobID:        childID,
-			URL:          u,
-			JobType:      models.JobTypeURLScraper,
-			Country:      req.Country,
-			UseBrowser:   req.UseBrowser,
-			GenerateJson: req.GenerateJson,
-			ParentJobID:  parentJobID,
+			JobID:         childID,
+			URL:           u,
+			JobType:       models.JobTypeURLScraper,
+			Country:       req.Country,
+			UseBrowser:    req.UseBrowser,
+			GenerateJson:  req.GenerateJson,
+			ParentJobID:   parentJobID,
+			PaymentHeader: c.Get(handler.PaymentHeader),
 		})
 	}
 

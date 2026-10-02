@@ -13,6 +13,12 @@ who can reach the port can submit scrape jobs and read every job result on the i
   and read the results.
 - Scrape targets reach whatever the server can route to. Treat the server's network
   position as part of the attack surface.
+- Settlement handler — when `XNO_FACILITATOR_URL` is set, a caller who presents a
+  valid x402 payment in `X-PAYMENT` has their scrape settled without an `API_KEY`.
+  That makes the handler the instance's billing boundary, so point it at a
+  facilitator you trust and understand that it only gates the last-resort handler
+  — an unpaid caller still gets everything the HTTP and browser handlers return.
+  The server holds no wallet key; callers sign with their own.
 
 ## Supported Versions
 

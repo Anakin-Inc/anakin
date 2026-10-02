@@ -24,6 +24,36 @@ Browsers are additionally limited by `CORS_ALLOW_ORIGINS` (default
 `http://localhost:3000`, the webapp dev server). Only listed origins can read API
 responses from a web page.
 
+## Paying Per Request
+
+Optional, off by default. When the settlement handler is enabled
+(`XNO_FACILITATOR_URL`), callers that would rather pay per scrape than hold an API
+key can present a signed x402 payment on any scrape endpoint:
+
+```bash
+curl -X POST http://localhost:8080/v1/scrape \
+  -H "Content-Type: application/json" \
+  -H "X-PAYMENT: $BASE64_X402_PAYLOAD" \
+  -d '{"url": "https://example.com"}'
+```
+
+The header is a base64-encoded x402 payment payload (raw JSON also works). It only
+matters when a scrape falls through to the settlement handler, so local and
+browser results are returned without one.
+
+Two things worth knowing:
+
+- **Payment failures are job failures, not `402` responses.** Scraping is
+  asynchronous, so an unpaid request completes as a `failed` job whose `error`
+  names the required terms (amount, asset, network, pay-to address). Submit again
+  with a matching payment. Returning a `402` on the submitting request would be a
+  larger API change — see the handler's notes in `docs/handlers.md`.
+- **Each payment buys exactly one scrape.** Reusing a captured `X-PAYMENT` header
+  is refused as a replay.
+
+The server never holds a wallet key; callers sign with their own wallet. See
+[handlers.md](handlers.md#settlement-handler) for the full flow and configuration.
+
 ## Rate Limiting
 
 None. You are responsible for managing load on your own infrastructure.

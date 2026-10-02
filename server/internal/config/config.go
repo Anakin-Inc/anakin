@@ -40,6 +40,20 @@ type Config struct {
 	// Anakin.io API handler (optional — fallback when local handlers fail)
 	AnakinAPIKey string
 
+	// Per-scrape settlement via an x402 facilitator (optional — fallback when
+	// every other handler fails). Enabled when FacilitatorURL is set.
+	// The server never holds a wallet key: callers sign payments with their own.
+	FacilitatorURL      string
+	SettlementNet       string
+	SettlementAddr      string
+	SettlementAmt       string
+	SettlementAsset     string
+	SettlementAssetName string
+	SettlementScheme    string
+	SettlementResource  string
+	SettlementSettle    bool
+	SettlementTimeout   time.Duration
+
 	// Security
 	APIKey           string // When set, every /v1 route requires it. Empty = open instance.
 	CORSAllowOrigins string // Origins allowed to read API responses in a browser
@@ -69,8 +83,20 @@ func Load() (*Config, error) {
 
 		AllowPrivateTargets: getBoolEnvDefault("ALLOW_PRIVATE_TARGETS", false),
 
-		GeminiAPIKey:     os.Getenv("GEMINI_API_KEY"),
-		AnakinAPIKey:     os.Getenv("ANAKIN_API_KEY"),
+		GeminiAPIKey: os.Getenv("GEMINI_API_KEY"),
+		AnakinAPIKey: os.Getenv("ANAKIN_API_KEY"),
+
+		FacilitatorURL:      os.Getenv("XNO_FACILITATOR_URL"),
+		SettlementNet:       os.Getenv("XNO_NETWORK"),
+		SettlementAddr:      os.Getenv("XNO_PAY_TO"),
+		SettlementAmt:       os.Getenv("XNO_AMOUNT"),
+		SettlementAsset:     os.Getenv("XNO_ASSET"),
+		SettlementAssetName: os.Getenv("XNO_ASSET_NAME"),
+		SettlementScheme:    os.Getenv("XNO_SCHEME"),
+		SettlementResource:  getEnvOrDefault("XNO_RESOURCE", "/v1/scrape"),
+		SettlementSettle:    getBoolEnvDefault("XNO_SETTLE", true),
+		SettlementTimeout:   getDurationEnv("XNO_TIMEOUT", 15*time.Second),
+
 		APIKey:           os.Getenv("API_KEY"),
 		CORSAllowOrigins: getEnvOrDefault("CORS_ALLOW_ORIGINS", "http://localhost:3000"),
 		TelemetryEnabled: getBoolEnvDefault("TELEMETRY", true),

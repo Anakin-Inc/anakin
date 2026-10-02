@@ -207,7 +207,7 @@ See [docs/API.md](docs/API.md) for the complete API reference. Quick overview:
 Each scrape job goes through the handler chain. On failure, it falls back to the next handler:
 
 ```
-HTTP Handler (fast, ~200ms) ──fail──▶ Browser Handler (Camoufox) ──fail──▶ API Handler (optional)
+HTTP Handler (fast, ~200ms) ──fail──▶ Browser Handler (Camoufox) ──fail──▶ API Handler (optional) ──fail──▶ Settlement Handler (optional)
 ```
 
 **HTTP Handler** — direct HTTP GET with a browser user-agent. Handles static HTML, server-rendered pages. No browser overhead.
@@ -215,6 +215,8 @@ HTTP Handler (fast, ~200ms) ──fail──▶ Browser Handler (Camoufox) ─�
 **Browser Handler** — connects to [Camoufox](https://github.com/daijro/camoufox) (anti-detect Firefox) over WebSocket via Playwright protocol. Full JavaScript rendering, network-idle detection, realistic browser fingerprints. Handles SPAs, lazy-loaded content, and sites with anti-bot protection.
 
 **API Handler** (optional) — delegates to an external scraping API when local handlers fail. Set `ANAKIN_API_KEY` to enable the built-in [anakin.io](https://anakin.io) fallback for hard-to-scrape sites (Cloudflare, DataDome, etc.). See [Adding Custom API Handlers](#adding-custom-api-handlers) below.
+
+**Settlement Handler** (optional) — settles each scrape individually through an [x402](https://x402.org) facilitator, so a caller pays per request instead of holding a prepaid API contract. Callers present a signed payment in the `X-PAYMENT` header. Set `XNO_FACILITATOR_URL` plus `XNO_NETWORK`, `XNO_PAY_TO` and `XNO_AMOUNT` to enable. The server never holds a wallet key — callers sign with their own wallet, so this does not add a custodial wallet to the deployment. See [docs/handlers.md](docs/handlers.md#settlement-handler).
 
 ### Adding Custom API Handlers
 
@@ -270,6 +272,16 @@ All configuration via environment variables:
 | `PROXY_URLS` | — | Comma-separated proxy pool for auto-selection (Thompson Sampling) |
 | `GEMINI_API_KEY` | — | Google Gemini API key for structured JSON extraction ([get one free](https://aistudio.google.com/apikey)) |
 | `ANAKIN_API_KEY` | — | [anakin.io](https://anakin.io) API key — enables hosted API as chain fallback for hard-to-scrape sites |
+| `XNO_FACILITATOR_URL` | — | x402 facilitator base URL — enables per-scrape settlement as the last-resort chain fallback |
+| `XNO_NETWORK` | — | Facilitator's settlement network identifier (e.g. `nano`) |
+| `XNO_PAY_TO` | — | Address that receives settlement payments |
+| `XNO_AMOUNT` | — | Price of one scrape in the asset's smallest unit |
+| `XNO_ASSET` | — | Asset identifier in the facilitator's convention |
+| `XNO_ASSET_NAME` | — | Human-readable asset label for logs and errors |
+| `XNO_SCHEME` | `exact` | x402 payment scheme |
+| `XNO_RESOURCE` | `/v1/scrape` | Resource identifier published in the payment terms |
+| `XNO_SETTLE` | `on` | Set to `off` to verify payments without settling them |
+| `XNO_TIMEOUT` | `15` | Per-facilitator-call timeout (seconds) |
 | `LOG_LEVEL` | `INFO` | Log level (DEBUG, INFO, WARN, ERROR) |
 | `TELEMETRY` | `on` | Anonymous usage telemetry (`off` to disable — see [TELEMETRY.md](TELEMETRY.md)) |
 | `TELEMETRY_URL` | — | Custom telemetry endpoint (defaults to `https://telemetry.anakin.io/v1/collect`) |

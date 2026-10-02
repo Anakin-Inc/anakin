@@ -14,6 +14,10 @@ func clearConfigEnvVars(t *testing.T) {
 		"BROWSER_LOAD_WAIT", "JOB_TIMEOUT", "MAX_JOB_RETRIES",
 		"WORKER_POOL_SIZE", "JOB_BUFFER_SIZE", "PROXY_URL", "PROXY_URLS",
 		"GEMINI_API_KEY", "TELEMETRY", "TELEMETRY_URL", "LOG_LEVEL",
+		"ANAKIN_API_KEY", "API_KEY", "CORS_ALLOW_ORIGINS", "ALLOW_PRIVATE_TARGETS",
+		"XNO_FACILITATOR_URL", "XNO_NETWORK", "XNO_PAY_TO", "XNO_AMOUNT",
+		"XNO_ASSET", "XNO_ASSET_NAME", "XNO_SCHEME", "XNO_RESOURCE",
+		"XNO_SETTLE", "XNO_TIMEOUT",
 	}
 	for _, v := range vars {
 		t.Setenv(v, "")
@@ -270,6 +274,101 @@ func TestLoad(t *testing.T) {
 		}
 		if cfg.TelemetryURL != "https://custom.example.com/telemetry" {
 			t.Errorf("expected custom TelemetryURL, got: %q", cfg.TelemetryURL)
+		}
+	})
+
+	t.Run("settlement is disabled by default", func(t *testing.T) {
+		clearConfigEnvVars(t)
+		t.Setenv("DATABASE_URL", "postgres://localhost/test")
+
+		cfg, err := Load()
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if cfg.FacilitatorURL != "" {
+			t.Errorf("expected no FacilitatorURL by default, got: %q", cfg.FacilitatorURL)
+		}
+		if cfg.SettlementNet != "" || cfg.SettlementAddr != "" || cfg.SettlementAmt != "" {
+			t.Errorf("expected no settlement terms by default, got net=%q addr=%q amt=%q",
+				cfg.SettlementNet, cfg.SettlementAddr, cfg.SettlementAmt)
+		}
+		// Settlement defaults to on so an operator only has to opt out.
+		if !cfg.SettlementSettle {
+			t.Error("expected SettlementSettle=true by default")
+		}
+		if cfg.SettlementTimeout != 15*time.Second {
+			t.Errorf("expected default SettlementTimeout 15s, got: %v", cfg.SettlementTimeout)
+		}
+		if cfg.SettlementResource != "/v1/scrape" {
+			t.Errorf("expected default SettlementResource '/v1/scrape', got: %q", cfg.SettlementResource)
+		}
+	})
+
+	t.Run("settlement terms via env vars", func(t *testing.T) {
+		clearConfigEnvVars(t)
+		t.Setenv("DATABASE_URL", "postgres://localhost/test")
+		t.Setenv("XNO_FACILITATOR_URL", "https://facilitator.example")
+		t.Setenv("XNO_NETWORK", "nano")
+		t.Setenv("XNO_PAY_TO", "nano_receiver")
+		t.Setenv("XNO_AMOUNT", "10")
+		t.Setenv("XNO_ASSET", "nano:xno")
+		t.Setenv("XNO_ASSET_NAME", "XNO")
+		t.Setenv("XNO_SCHEME", "exact")
+		t.Setenv("XNO_RESOURCE", "/v1/scrape")
+		t.Setenv("XNO_TIMEOUT", "30")
+
+		cfg, err := Load()
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if cfg.FacilitatorURL != "https://facilitator.example" {
+			t.Errorf("expected FacilitatorURL to match, got: %q", cfg.FacilitatorURL)
+		}
+		if cfg.SettlementNet != "nano" {
+			t.Errorf("expected SettlementNet 'nano', got: %q", cfg.SettlementNet)
+		}
+		if cfg.SettlementAddr != "nano_receiver" {
+			t.Errorf("expected SettlementAddr 'nano_receiver', got: %q", cfg.SettlementAddr)
+		}
+		if cfg.SettlementAmt != "10" {
+			t.Errorf("expected SettlementAmt '10', got: %q", cfg.SettlementAmt)
+		}
+		if cfg.SettlementAsset != "nano:xno" {
+			t.Errorf("expected SettlementAsset 'nano:xno', got: %q", cfg.SettlementAsset)
+		}
+		if cfg.SettlementAssetName != "XNO" {
+			t.Errorf("expected SettlementAssetName 'XNO', got: %q", cfg.SettlementAssetName)
+		}
+		if cfg.SettlementTimeout != 30*time.Second {
+			t.Errorf("expected SettlementTimeout 30s, got: %v", cfg.SettlementTimeout)
+		}
+	})
+
+	t.Run("XNO_SETTLE=off disables settlement finalisation", func(t *testing.T) {
+		clearConfigEnvVars(t)
+		t.Setenv("DATABASE_URL", "postgres://localhost/test")
+		t.Setenv("XNO_SETTLE", "off")
+
+		cfg, err := Load()
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if cfg.SettlementSettle {
+			t.Error("expected SettlementSettle=false when XNO_SETTLE=off")
+		}
+	})
+
+	t.Run("invalid XNO_TIMEOUT falls back to the default", func(t *testing.T) {
+		clearConfigEnvVars(t)
+		t.Setenv("DATABASE_URL", "postgres://localhost/test")
+		t.Setenv("XNO_TIMEOUT", "not-a-number")
+
+		cfg, err := Load()
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if cfg.SettlementTimeout != 15*time.Second {
+			t.Errorf("expected default SettlementTimeout for invalid input, got: %v", cfg.SettlementTimeout)
 		}
 	})
 }

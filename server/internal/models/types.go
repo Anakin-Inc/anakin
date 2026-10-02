@@ -106,15 +106,16 @@ type ErrorResponse struct {
 
 // JobMessage is the message passed from API handlers to the worker pool.
 type JobMessage struct {
-	JobID        string `json:"jobId"`
-	URL          string `json:"url"`
-	JobType      string `json:"jobType"`
-	Country      string `json:"country"`
-	ForceFresh   bool   `json:"forceFresh"`
-	UseBrowser   bool   `json:"useBrowser"`
-	GenerateJson bool   `json:"generateJson"`
-	ParentJobID  string `json:"parentJobId,omitempty"`
-	SyncRequest  bool   `json:"syncRequest,omitempty"` // true when submitted via /v1/scrape
+	JobID         string `json:"jobId"`
+	URL           string `json:"url"`
+	JobType       string `json:"jobType"`
+	Country       string `json:"country"`
+	ForceFresh    bool   `json:"forceFresh"`
+	UseBrowser    bool   `json:"useBrowser"`
+	GenerateJson  bool   `json:"generateJson"`
+	ParentJobID   string `json:"parentJobId,omitempty"`
+	SyncRequest   bool   `json:"syncRequest,omitempty"` // true when submitted via /v1/scrape
+	PaymentHeader string `json:"-"`                     // raw x402 payment; never persisted
 }
 
 // HandlerRequest holds parameters passed to the scraping handler chain.
@@ -128,6 +129,7 @@ type HandlerRequest struct {
 	AllowedHandlers []string          // If set, only these handlers are tried
 	CustomHeaders   map[string]string // Per-request custom headers
 	CustomUserAgent string            // Per-request user-agent override
+	PaymentHeader   string            // Raw x402 payment from the caller, for settlement handlers
 }
 
 // ScrapeResult holds the output from a scraping handler.

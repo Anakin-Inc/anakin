@@ -89,6 +89,16 @@ func main() {
 		slog.Info("anakin.io API handler enabled as chain fallback")
 	}
 
+	// Per-scrape settlement fallback (optional — set XNO_FACILITATOR_URL to enable)
+	if xno := newSettlementHandler(cfg, httpHandler); xno != nil {
+		handlers = append(handlers, xno)
+		slog.Info("per-scrape settlement handler enabled as chain fallback",
+			"network", cfg.SettlementNet,
+			"amount", cfg.SettlementAmt,
+			"asset", cfg.SettlementAssetName,
+			"settle", cfg.SettlementSettle)
+	}
+
 	chain := handler.NewChain(handlers)
 	slog.Info("handler chain initialized", "handlers", chain.HandlerNames())
 
@@ -148,7 +158,7 @@ func main() {
 	app.Use(cors.New(cors.Config{
 		AllowOrigins: cfg.CORSAllowOrigins,
 		AllowMethods: "GET,POST,PUT,DELETE,OPTIONS",
-		AllowHeaders: "Origin,Content-Type,Accept,Authorization,X-API-Key,Api-Key",
+		AllowHeaders: "Origin,Content-Type,Accept,Authorization,X-API-Key,Api-Key,X-PAYMENT",
 	}))
 
 	// Setup routes
@@ -215,6 +225,58 @@ func storageMode(db *sql.DB) string {
 		return "postgresql"
 	}
 	return "memory"
+}
+
+// newSettlementHandler builds the per-scrape settlement handler, or nil when it
+// is not configured.
+//
+// Incomplete terms are reported at boot rather than at scrape time: a
+// half-configured facilitator would otherwise register a handler that skips every
+// request behind a generic "unhealthy" warning. The settled scrape is performed
+// by backend — the paid external API when one is configured, otherwise a plain
+// SSRF-guarded HTTP GET.
+func newSettlementHandler(cfg *config.Config, backend handler.ScrapingHandler) *handler.XNOHandler {
+	if cfg.FacilitatorURL == "" {
+		return nil
+	}
+
+	var missing []string
+	if cfg.SettlementNet == "" {
+		missing = append(missing, "XNO_NETWORK")
+	}
+	if cfg.SettlementAddr == "" {
+		missing = append(missing, "XNO_PAY_TO")
+	}
+	if cfg.SettlementAmt == "" {
+		missing = append(missing, "XNO_AMOUNT")
+	}
+	if len(missing) > 0 {
+		slog.Error("XNO_FACILITATOR_URL is set but settlement terms are incomplete — handler disabled",
+			"missing", missing)
+		return nil
+	}
+
+	// With an API key configured the payment buys the external API call;
+	// otherwise it buys a plain fetch through the shared HTTP handler.
+	settled := backend
+	if cfg.AnakinAPIKey != "" {
+		settled = handler.NewAnakinHandler(cfg.AnakinAPIKey)
+	}
+
+	settle := cfg.SettlementSettle
+	return handler.NewXNOHandler(handler.XNOHandlerConfig{
+		FacilitatorURL: cfg.FacilitatorURL,
+		Network:        cfg.SettlementNet,
+		PayTo:          cfg.SettlementAddr,
+		Amount:         cfg.SettlementAmt,
+		Scheme:         cfg.SettlementScheme,
+		Asset:          cfg.SettlementAsset,
+		AssetName:      cfg.SettlementAssetName,
+		Resource:       cfg.SettlementResource,
+		Settle:         &settle,
+		Timeout:        cfg.SettlementTimeout,
+		Backend:        settled,
+	})
 }
 
 func errorHandler(c *fiber.Ctx, err error) error {

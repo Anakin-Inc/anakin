@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+### Added
+- **Per-scrape settlement handler** — optional `xno` chain fallback that settles each scrape individually through an x402 facilitator, so callers can pay per request instead of holding a prepaid API contract. Enabled with `XNO_FACILITATOR_URL`; network, pay-to address and per-scrape price are all operator-configured, and the server never holds a wallet key. Verified payments are single-use (replay-protected by authorization nonce) and an unsettled payment never returns page content (`server/internal/handler/xno.go`, `server/internal/handler/nonce_cache.go`). See [docs/handlers.md](docs/handlers.md#settlement-handler)
+
 ### Fixed
 - **Proxy latency tracking** — the average latency EMA now seeds with the first observed sample instead of blending it against a zero baseline, which had caused a proxy's first request to be recorded at ~20% of its true latency (`server/internal/proxy/pool.go`)
 

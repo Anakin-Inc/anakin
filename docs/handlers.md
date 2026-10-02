@@ -3,8 +3,8 @@
 The handler chain is the core of AnakinScraper. Each scrape job goes through a sequence of handlers. If one fails, the next one tries automatically.
 
 ```
-HTTP Handler ──fail──▶ Browser Handler ──fail──▶ API Handler ──fail──▶ ERROR
-(fast, ~200ms)         (Camoufox, ~2-5s)         (external, optional)
+HTTP Handler ──fail──▶ Browser Handler ──fail──▶ API Handler ──fail──▶ Settlement ──fail──▶ ERROR
+(fast, ~200ms)         (Camoufox, ~2-5s)         (external, optional)   (paid per scrape)
 ```
 
 ## Built-in Handlers
@@ -53,6 +53,80 @@ Delegates to an external scraping API. This is the last resort — when your loc
 
 **Built-in:** `anakin.io` handler, activated by setting `ANAKIN_API_KEY`.
 
+### Settlement Handler
+
+**Name:** `xno`
+
+Settles each scrape individually through an [x402](https://x402.org) facilitator, so a
+caller pays per request instead of holding a prepaid contract. This is the last
+resort: it only runs when every other handler has failed, and it is intended for
+callers that hold crypto but not an API key.
+
+- Only active when `XNO_FACILITATOR_URL` is set (see the table below)
+- Requires the caller to present a signed payment in the `X-PAYMENT` header
+- Terms — network, amount, asset, pay-to address — are all operator-configured
+- **The server never holds a wallet key.** Callers sign with their own wallet and
+  the operator configures only a receiving address, so enabling this does not add
+  a custodial wallet to the deployment.
+
+#### Request flow
+
+A facilitator verifies and settles payments. It does not fetch pages, so the
+scrape itself is performed locally:
+
+```
+1. Caller sends X-PAYMENT: <base64 x402 payment payload>
+2. Handler POSTs the payload to the facilitator's /verify
+3. Handler performs the scrape (via the API handler if one is configured,
+   otherwise the HTTP handler)
+4. Handler POSTs the payload to the facilitator's /settle
+5. Handler returns the ScrapeResult
+```
+
+A request that reaches this handler without a usable payment fails with a
+`*PaymentRequiredError` naming the terms, so the caller knows what to pay.
+
+#### Configuration
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `XNO_FACILITATOR_URL` | — | Facilitator base URL. Enables the handler when set |
+| `XNO_NETWORK` | — | Facilitator's network identifier (e.g. `nano`, `base-sepolia`) |
+| `XNO_PAY_TO` | — | Address that receives payment |
+| `XNO_AMOUNT` | — | Price of one scrape in the asset's base units |
+| `XNO_ASSET` | — | Asset identifier, in the facilitator's convention |
+| `XNO_ASSET_NAME` | — | Human-readable asset label for logs and errors |
+| `XNO_SCHEME` | `exact` | x402 payment scheme |
+| `XNO_RESOURCE` | `/v1/scrape` | Resource identifier published in the terms |
+| `XNO_SETTLE` | `true` | Set to `off` to verify payments without settling them |
+| `XNO_TIMEOUT` | `15` | Per-facilitator-call timeout (seconds) |
+
+`XNO_AMOUNT` is an integer in the asset's smallest unit: `"1 XNO"` is `1000000`
+rawNano, and `"$0.01"` of USDC is `10000`.
+
+When `ANAKIN_API_KEY` is also set, the payment buys the external API call rather
+than a plain fetch.
+
+#### Network support
+
+The handler is not specific to Nano — scheme, network, asset and pay-to address
+are all configuration. It settles on whatever network the configured facilitator
+supports, so the same code path works for an XNO facilitator or an EVM one.
+Confirm that a facilitator supports your network before enabling this: the server
+does not settle payments itself and cannot fall back to another network.
+
+#### Replay protection
+
+A facilitator keeps reporting a captured authorization as valid until it expires,
+so validity alone does not prevent replay. This handler records each authorization
+nonce and refuses a second use, and rejects authorizations whose validity window
+exceeds the replay-cache TTL. Payments are verified before the scrape runs, and
+settlement failures do not return page content.
+
+Because responses are job records rather than synchronous HTTP responses, a
+payment failure surfaces as a `failed` job whose `error` names the terms —
+not as a `402` on the submitting request. See [API.md](API.md).
+
 ## How the Chain Works
 
 ```
@@ -65,7 +139,9 @@ for each handler in chain:
        └── Failure → log warning, try next handler
 ```
 
-If all handlers fail, the job returns the last error.
+If all handlers fail, the job returns the last error. A `*PaymentRequiredError`
+from the settlement handler stops the retry loop rather than re-running the
+earlier handlers — the caller has to pay, not retry.
 
 ## Per-Domain Handler Selection
 
@@ -130,6 +206,7 @@ type HandlerRequest struct {
     AllowedHandlers []string          // from domain config handlerChain
     CustomHeaders   map[string]string // from domain config
     CustomUserAgent string            // from domain config
+    PaymentHeader   string            // raw x402 payment from the caller
 }
 ```
 
