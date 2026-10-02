@@ -19,6 +19,7 @@ Direct HTTP GET with a browser user-agent. Fastest option (~200ms). Handles stat
 - Uses a realistic Chrome user-agent by default
 - Supports custom headers and user-agent per request (via domain configs)
 - Supports per-request proxy override
+- Transcodes pages served in a legacy encoding (Shift_JIS, windows-1251, ISO-8859-1, …) to UTF-8, using the `Content-Type` header, then a `<meta>` declaration, then windows-1252
 - Response body limited to 10MB
 - Returns error on HTTP 4xx/5xx
 
