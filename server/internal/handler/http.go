@@ -4,6 +4,7 @@ package handler
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -19,8 +20,9 @@ const defaultUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/
 
 // HTTPHandler implements ScrapingHandler using direct HTTP requests.
 type HTTPHandler struct {
-	client  *http.Client
-	timeout time.Duration
+	client              *http.Client
+	timeout             time.Duration
+	allowPrivateTargets bool
 }
 
 // NewHTTPHandler creates a new HTTP handler with optional proxy support.
@@ -47,13 +49,29 @@ func NewHTTPHandler(timeout time.Duration, proxyURL string, allowPrivateTargets 
 		}).DialContext
 	}
 
-	return &HTTPHandler{
-		client: &http.Client{
-			Transport: transport,
-			Timeout:   timeout,
-		},
-		timeout: timeout,
+	client := &http.Client{
+		Transport: transport,
+		Timeout:   timeout,
 	}
+	if !allowPrivateTargets {
+		client.CheckRedirect = guardRedirect
+	}
+
+	return &HTTPHandler{
+		client:              client,
+		timeout:             timeout,
+		allowPrivateTargets: allowPrivateTargets,
+	}
+}
+
+// guardRedirect refuses redirect hops to internal addresses. Behind a proxy the dial
+// guard is off, so this is what stops an origin that passed the boundary check from
+// bouncing the request inward.
+func guardRedirect(req *http.Request, via []*http.Request) error {
+	if len(via) >= 10 {
+		return errors.New("stopped after 10 redirects")
+	}
+	return netguard.ValidateHost(req.Context(), req.URL.Hostname())
 }
 
 func (h *HTTPHandler) Name() string { return "http" }
@@ -93,6 +111,9 @@ func (h *HTTPHandler) Scrape(ctx context.Context, req *models.HandlerRequest) (*
 			transport.Proxy = http.ProxyURL(parsed)
 		}
 		client = &http.Client{Transport: transport, Timeout: h.timeout}
+		if !h.allowPrivateTargets {
+			client.CheckRedirect = guardRedirect
+		}
 	}
 
 	resp, err := client.Do(httpReq)

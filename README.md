@@ -75,12 +75,13 @@ cd anakinscraper-oss
 make up
 ```
 
-That's it. Three containers start:
+That's it. Four containers start:
 
 | Service | Port | Description |
 |---------|------|-------------|
 | Server | 8080 | REST API + worker pool |
-| Browser Service | 9222 | Camoufox anti-detect browser (WebSocket) |
+| Browser Service | internal | Camoufox anti-detect browser (WebSocket), reachable only from the server |
+| Smokescreen | internal | Egress proxy: the browser's only route out; refuses internal addresses |
 | PostgreSQL | 5432 | Job storage |
 
 ### Web Dashboard
@@ -300,7 +301,8 @@ anakinscraper-oss/
 ├── webapp/                     # React web dashboard (Vite + Tailwind)
 ├── openclaw-skill/             # OpenClaw skill wrapper
 ├── examples/                   # Usage examples
-├── docker-compose.yml          # Full stack (3 containers)
+├── smokescreen/                # Egress proxy image for the browser
+├── docker-compose.yml          # Full stack (4 containers)
 ├── scripts/init-db.sql         # Database schema
 └── .env.example                # Config template
 ```

@@ -80,7 +80,7 @@ func main() {
 	}
 
 	httpHandler := handler.NewHTTPHandler(cfg.BrowserTimeout, cfg.ProxyURL, cfg.AllowPrivateTargets)
-	browserHandler := handler.NewBrowserHandler(cfg.BrowserWSURL, cfg.BrowserTimeout, cfg.BrowserLoadWait)
+	browserHandler := handler.NewBrowserHandler(cfg.BrowserWSURL, cfg.BrowserTimeout, cfg.BrowserLoadWait, cfg.AllowPrivateTargets)
 	handlers := []handler.ScrapingHandler{httpHandler, browserHandler}
 
 	// Anakin.io API fallback (optional — set ANAKIN_API_KEY to enable)

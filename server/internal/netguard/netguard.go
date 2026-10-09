@@ -4,17 +4,13 @@
 //
 // Two layers, because neither is sufficient alone:
 //
-//   - ValidateHost runs at the API boundary. The caller gets a 400 instead of a
-//     job that fails later, and it is the only protection available for the
-//     browser handler, whose dialer lives in the Camoufox process.
+//   - ValidateHost runs at the API boundary. The caller gets a 400 instead of a job that fails later.
 //   - DialControl runs at connect time on the HTTP handler's dialer. It sees the
 //     post-resolution IP of every hop, so it also covers redirect chains and DNS
 //     rebinding, which a one-shot hostname check cannot see.
 //
-// KNOWN GAP: the browser handler has boundary validation only. A target whose DNS
-// record flips to an internal address between validation and navigation, or that
-// redirects there, is not caught. Closing that needs an egress proxy in front of
-// the browser service.
+// The browser's dialer lives in the Camoufox process, out of reach of DialControl.
+// The browser handler checks each request it can see; the deployment enforces the rest at connect time by giving the browser no route out except an egress proxy that refuses internal addresses (smokescreen in docker-compose.yml), which also covers redirect hops, WebSockets and DNS rebinding.
 package netguard
 
 import (

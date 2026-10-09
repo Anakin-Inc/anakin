@@ -14,16 +14,24 @@ services:
       interval: 5s
       retries: 5
 
+  smokescreen:
+    build: ./smokescreen
+    # The browser's only route out: allows public destinations, refuses loopback, private and link-local (cloud metadata) addresses.
+    networks: [default, browser-egress]
+    restart: unless-stopped
+
   browser-service:
     build: ./browser-service
-    ports:
-      - "9222:9222"
-      - "8090:8080"
+    # Internal network only, so traffic that ignores the proxy has nowhere to go.
+    # The Playwright endpoint is unauthenticated and is not published to the host.
+    networks: [browser-egress]
+    depends_on: [smokescreen]
     environment:
       PORT: "9222"
       WS_PATH: camoufox
       HEADLESS: "true"
       HEALTH_CHECK_PORT: "8080"
+      PROXY_SERVER: http://smokescreen:4750
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
       interval: 10s
@@ -32,6 +40,7 @@ services:
   server:
     build: ./server
     ports: ["8080:8080"]
+    networks: [default, browser-egress]
     restart: on-failure
     depends_on:
       postgres: { condition: service_healthy }
@@ -42,6 +51,10 @@ services:
       WORKER_POOL_SIZE: "5"
       JOB_TIMEOUT: "120"
       LOG_LEVEL: INFO
+
+networks:
+  browser-egress:
+    internal: true
 
 volumes:
   postgres_data:

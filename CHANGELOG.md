@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### Security
+- **Browser egress** — pages rendered by the browser could reach loopback, private and cloud-metadata addresses through redirects, navigations, sub-resources and WebSockets, bypassing the scrape-target check. In `docker-compose.yml` the browser now sits on an internal-only network whose sole route out is a [Smokescreen](https://github.com/stripe/smokescreen) egress proxy that refuses internal addresses; the browser handler also checks every request and refuses to return content from a blocked address (`server/internal/handler/browser.go`)
+- **Proxied redirects** — with a proxy configured, the HTTP handler now validates each redirect hop (`server/internal/handler/http.go`)
+- **Browser ports** — `docker-compose.yml` no longer publishes the unauthenticated Playwright endpoint or the browser health port
+
 ### Fixed
 - **Proxy latency tracking** — the average latency EMA now seeds with the first observed sample instead of blending it against a zero baseline, which had caused a proxy's first request to be recorded at ~20% of its true latency (`server/internal/proxy/pool.go`)
 

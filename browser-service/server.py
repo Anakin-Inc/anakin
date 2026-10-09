@@ -123,6 +123,11 @@ def run_browser():
             **({"username": PROXY_USERNAME} if PROXY_USERNAME else {}),
             **({"password": PROXY_PASSWORD} if PROXY_PASSWORD else {}),
         }
+        # Firefox bypasses the proxy for localhost by default, which would let a page reach this container's own Playwright endpoint.
+        kwargs["firefox_user_prefs"] = {
+            "network.proxy.allow_hijacking_localhost": True,
+            "network.proxy.no_proxies_on": "",
+        }
 
     logger.info(
         "Launching camoufox server (headless=%s, port=%d, ws_path=%s)",
